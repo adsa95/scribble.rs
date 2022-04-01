@@ -18,14 +18,13 @@ func initEnglishTranslation() Translation {
 	translation.put("save", "Save")
 	translation.put("toggle-fullscreen", "Toggle fullscreen")
 	translation.put("show-help", "Show help")
-	translation.put("votekick-a-player", "Vote to kick a player")
+	translation.put("kick-a-player", "Kick a player")
 
 	translation.put("last-turn", "(Last turn: %s)")
 
 	translation.put("drawer-kicked", "Since the kicked player has been drawing, none of you will get any points this round.")
 	translation.put("self-kicked", "You have been kicked")
-	translation.put("kick-vote", "(%s/%s) players voted to kick %s.")
-	translation.put("player-kicked", "Player has been kicked.")
+	translation.put("player-kicked", "%s has been kicked.")
 	translation.put("owner-change", "%s is the new lobby owner.")
 
 	translation.put("change-lobby-settings-tooltip", "Change the lobby settings")
