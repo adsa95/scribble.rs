@@ -104,9 +104,6 @@ type EditableLobbySettings struct {
 	// Public defines whether the lobby is being broadcast to clients asking
 	// for available lobbies.
 	Public bool `json:"public"`
-	// EnableVotekick decides whether players are allowed to kick eachother
-	// by casting majority votes.
-	EnableVotekick bool `json:"enableVotekick"`
 	// CustomWordsChance determines the chance of each word being a custom
 	// word on the next word prompt. This needs to be an integer between
 	// 0 and 100. The value represents a percentage.
@@ -181,8 +178,6 @@ type Player struct {
 	// space for new players. The player with the oldest disconnect.Time will
 	// get kicked.
 	disconnectTime *time.Time
-
-	votedForKick map[string]bool
 
 	// ID uniquely identified the Player.
 	ID string `json:"id"`
@@ -278,12 +273,11 @@ func (lobby *Lobby) AppendFill(fill *FillEvent) {
 
 func createPlayer(name string) *Player {
 	return &Player{
-		Name:         SanitizeName(name),
-		ID:           uuid.Must(uuid.NewV4()).String(),
-		userSession:  uuid.Must(uuid.NewV4()).String(),
-		votedForKick: make(map[string]bool),
-		socketMutex:  &sync.Mutex{},
-		State:        Guessing,
+		Name:        SanitizeName(name),
+		ID:          uuid.Must(uuid.NewV4()).String(),
+		userSession: uuid.Must(uuid.NewV4()).String(),
+		socketMutex: &sync.Mutex{},
+		State:       Guessing,
 	}
 }
 

@@ -84,15 +84,9 @@ type FillEvent struct {
 	Data *Fill  `json:"data"`
 }
 
-// KickVote represents a players vote to kick another players. If the VoteCount
-// is as great or greater than the RequiredVoteCount, the event indicates a
-// successful kick vote. The voting is anonymous, meaning the voting player
-// won't be exposed.
-type KickVote struct {
-	PlayerID          string `json:"playerId"`
-	PlayerName        string `json:"playerName"`
-	VoteCount         int    `json:"voteCount"`
-	RequiredVoteCount int    `json:"requiredVoteCount"`
+type Kick struct {
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
 }
 
 func (lobby *Lobby) HandleEvent(raw []byte, received *GameEvent, player *Player) error {
@@ -211,15 +205,13 @@ func (lobby *Lobby) HandleEvent(raw []byte, received *GameEvent, player *Player)
 				}
 			}
 		}
-	} else if received.Type == "kick-vote" {
-		if lobby.EnableVotekick {
-			toKickID, isString := (received.Data).(string)
-			if !isString {
-				return fmt.Errorf("invalid data in kick-vote event: %v", received.Data)
-			}
-
-			handleKickVoteEvent(lobby, player, toKickID)
+	} else if received.Type == "kick" {
+		toKickID, isString := (received.Data).(string)
+		if !isString {
+			return fmt.Errorf("invalid data in kick-vote event: %v", received.Data)
 		}
+
+		handleKickEvent(lobby, player, toKickID)
 	} else if received.Type == "start" {
 		if lobby.State != Ongoing && player == lobby.Owner {
 			//We are reseting each players score, since players could
@@ -375,14 +367,14 @@ func (lobby *Lobby) sendMessageToAllNonGuessing(message string, sender *Player) 
 	}
 }
 
-func handleKickVoteEvent(lobby *Lobby, player *Player, toKickID string) {
+func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 	//Kicking yourself isn't allowed
 	if toKickID == player.ID {
 		return
 	}
 
-	//A player can't vote twice to kick someone
-	if player.votedForKick[toKickID] {
+	//Only lobby creator can kick
+	if player != lobby.creator {
 		return
 	}
 
@@ -401,23 +393,11 @@ func handleKickVoteEvent(lobby *Lobby, player *Player, toKickID string) {
 
 	playerToKick := lobby.players[playerToKickIndex]
 
-	player.votedForKick[toKickID] = true
-	var voteKickCount int
-	for _, otherPlayer := range lobby.players {
-		if otherPlayer.Connected && otherPlayer.votedForKick[toKickID] {
-			voteKickCount++
-		}
-	}
-
-	votesRequired := calculateVotesNeededToKick(playerToKick, lobby)
-
 	kickEvent := &GameEvent{
-		Type: "kick-vote",
-		Data: &KickVote{
-			PlayerID:          playerToKick.ID,
-			PlayerName:        playerToKick.Name,
-			VoteCount:         voteKickCount,
-			RequiredVoteCount: votesRequired,
+		Type: "kick",
+		Data: &Kick{
+			PlayerID:   playerToKick.ID,
+			PlayerName: playerToKick.Name,
 		},
 	}
 
@@ -426,12 +406,7 @@ func handleKickVoteEvent(lobby *Lobby, player *Player, toKickID string) {
 		lobby.WriteJSON(otherPlayer, kickEvent)
 	}
 
-	//If the valid vote also happens to be the last vote needed, we kick the player.
-	//Since we send the events to all players beforehand, the target player is automatically
-	//being noteified of his own kick.
-	if voteKickCount >= votesRequired {
-		kickPlayer(lobby, playerToKick, playerToKickIndex)
-	}
+	kickPlayer(lobby, playerToKick, playerToKickIndex)
 }
 
 // kickPlayer kicks the given player from the lobby, updating the lobby
@@ -444,11 +419,6 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 		if disconnectError != nil {
 			log.Printf("Error disconnecting kicked player:\n\t%s\n", disconnectError)
 		}
-	}
-
-	//Since the player is already kicked, we first clean up the kicking information related to that player
-	for _, otherPlayer := range lobby.players {
-		delete(otherPlayer.votedForKick, playerToKick.ID)
 	}
 
 	//If the owner is kicked, we choose the next best person as the owner.
@@ -504,35 +474,6 @@ type OwnerChangeEvent struct {
 type NameChangeEvent struct {
 	PlayerID   string `json:"playerId"`
 	PlayerName string `json:"playerName"`
-}
-
-func calculateVotesNeededToKick(playerToKick *Player, lobby *Lobby) int {
-	connectedPlayerCount := lobby.GetConnectedPlayerCount()
-
-	//If there are only two players, e.g. none of them should be able to
-	//kick the other.
-	if connectedPlayerCount <= 2 {
-		return 2
-	}
-
-	if playerToKick == lobby.creator {
-		//We don't want to allow people to kick the creator, as this could
-		//potentially annoy certain creators. For example a streamer playing
-		//a game with viewers could get trolled this way. Just one
-		//hypothetical scenario, I am sure there are more ;)
-
-		//All players excluding the owner themselves.
-		return connectedPlayerCount - 1
-	}
-
-	//If the amount of players equals an even number, such as 6, we will always
-	//need half of that. If the amount is uneven, we'll get a floored result.
-	//therefore we always add one to the amount.
-	//examples:
-	//    (6+1)/2 = 3
-	//    (5+1)/2 = 3
-	//Therefore it'll never be possible for a minority to kick a player.
-	return (connectedPlayerCount + 1) / 2
 }
 
 func handleNameChangeEvent(caller *Player, lobby *Lobby, name string) {
@@ -604,10 +545,6 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 		//Initially all players are in guessing state, as the drawer gets
 		//defined further at the bottom.
 		otherPlayer.State = Guessing
-
-		//FIXME Reconsider resetting this. I can't think of a good argument
-		//for this right now.
-		otherPlayer.votedForKick = make(map[string]bool)
 	}
 
 	recalculateRanks(lobby)
@@ -901,7 +838,7 @@ func (lobby *Lobby) triggerPlayersUpdate() {
 
 // CreateLobby creates a new lobby including the initial player (owner) and
 // optionally returns an error, if any occurred during creation.
-func CreateLobby(playerName, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance, clientsPerIPLimit int, customWords []string, enableVotekick bool) (*Player, *Lobby, error) {
+func CreateLobby(playerName, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance, clientsPerIPLimit int, customWords []string) (*Player, *Lobby, error) {
 	lobby := &Lobby{
 		LobbyID: uuid.Must(uuid.NewV4()).String(),
 		EditableLobbySettings: &EditableLobbySettings{
@@ -910,7 +847,6 @@ func CreateLobby(playerName, chosenLanguage string, publicLobby bool, drawingTim
 			MaxPlayers:        maxPlayers,
 			CustomWordsChance: customWordsChance,
 			ClientsPerIPLimit: clientsPerIPLimit,
-			EnableVotekick:    enableVotekick,
 			Public:            publicLobby,
 		},
 		CustomWords:    customWords,
@@ -996,7 +932,6 @@ func generateReadyData(lobby *Lobby, player *Player) *Ready {
 		AllowDrawing: player.State == Drawing,
 		PlayerName:   player.Name,
 
-		VotekickEnabled:    lobby.EnableVotekick,
 		GameState:          lobby.State,
 		OwnerID:            lobby.Owner.ID,
 		Round:              lobby.Round,

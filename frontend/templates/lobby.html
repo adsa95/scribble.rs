@@ -52,8 +52,8 @@
                             <img src="{{.RootPath}}/resources/help.svg" class="header-button-image" />
                         </button>
                         <button id="kick-button" style="display: none;" onclick="showKickDialog()"
-                            class="dialog-button header-button" alt="{{.Translation.Get "votekick-a-player"}}"
-                            title="{{.Translation.Get "votekick-a-player"}}">
+                            class="dialog-button header-button" alt="{{.Translation.Get "kick-a-player"}}"
+                            title="{{.Translation.Get "kick-a-player"}}">
                             <img src="{{.RootPath}}/resources/kick.png" class="header-button-image" />
                         </button>
                         <button id="lobby-settings-button" style="display: none;" onclick="showLobbySettingsDialog()"
@@ -182,9 +182,6 @@
                                     <input id="lobby-settings-clients-per-ip-limit" type="number"
                                         name="clients_per_ip_limit" min="{{.MinClientsPerIPLimit}}"
                                         max="{{.MaxClientsPerIPLimit}}" value="{{.ClientsPerIPLimit}}" />
-                                    <b>{{.Translation.Get "enable-votekick-setting"}}</b>
-                                    <input id="lobby-settings-enable-votekick" type="checkbox" name="enable_votekick" {{if eq .EnableVotekick
-                                                    true}}checked{{end}} />
                                 </div>
                             </div>
                             <div class="button-center-wrapper">
@@ -207,7 +204,7 @@
                         </div>
 
                         <div id="kick-dialog" class="center-dialog">
-                            <span class="dialog-title">{{.Translation.Get "votekick-a-player"}}</span>
+                            <span class="dialog-title">{{.Translation.Get "kick-a-player"}}</span>
                             <div class="center-dialog-content">
                                 <div id="kick-dialog-players"></div>
                             </div>
@@ -607,14 +604,6 @@
         }
 
         function showKickDialog() {
-            if (votekickEnabled !== true) {
-                //Should never show, as this method should never be called anyways.
-                //Anyways, in case of a bug or forcefully calling this, we still
-                //intend to inform the user.
-                alert("Votekicking isn't enabled in this lobby.");
-                return;
-            }
-
             if (cachedPlayers && cachedPlayers) {
                 kickDialogPlayers.innerHTML = "";
 
@@ -623,7 +612,7 @@
                     if (player.id !== ownID && player.connected) {
                         const playerKickEntry = document.createElement("button");
                         playerKickEntry.classList.add("kick-player-button");
-                        playerKickEntry.onclick = () => onVotekickPlayer(player.id);
+                        playerKickEntry.onclick = () => onKickPlayer(player.id);
                         playerKickEntry.innerText = player.name;
                         kickDialogPlayers.appendChild(playerKickEntry);
                     }
@@ -685,7 +674,6 @@
                 drawing_time: document.getElementById("lobby-settings-drawing-time").value,
                 rounds: document.getElementById("lobby-settings-max-rounds").value,
                 public: document.getElementById("lobby-settings-public").checked,
-                enable_votekick: document.getElementById("lobby-settings-enable-votekick").checked,
                 max_players: document.getElementById("lobby-settings-max-players").value,
                 clients_per_ip_limit: document.getElementById("lobby-settings-clients-per-ip-limit").value,
                 custom_words_chance: document.getElementById("lobby-settings-custom-words-chance").value,
@@ -986,9 +974,17 @@
             wordDialog.style.visibility = "hidden";
         }
 
-        function onVotekickPlayer(playerId) {
+        function onKickPlayer(playerId) {
+            if (ownerID === playerId) {
+                //Should never show, as this method should never be called anyways.
+                //Anyways, in case of a bug or forcefully calling this, we still
+                //intend to inform the user.
+                alert("Cannot kick yourself, you're the lobby owner!");
+                return;
+            }
+
             socket.send(JSON.stringify({
-                type: "kick-vote",
+                type: "kick",
                 data: playerId
             }));
             hideKickDialog();
@@ -1013,7 +1009,6 @@
         let rounds = 0;
         let roundEndTime = 0;
         let gameState = "unstarted";
-        let votekickEnabled;
         let drawingTimeSetting = "∞";
 
         function registerMessageHandler(targetSocket) {
@@ -1122,15 +1117,12 @@
                     promptWords(parsed.data[0], parsed.data[1], parsed.data[2]);
                 } else if (parsed.type === "drawing") {
                     applyDrawData(parsed.data);
-                } else if (parsed.type === "kick-vote") {
-                    if (parsed.data.playerId === ownID && parsed.data.voteCount >= parsed.data.requiredVoteCount) {
+                } else if (parsed.type === "kick") {
+                    if (parsed.data.playerId === ownID) {
                         alert('{{.Translation.Get "self-kicked"}}');
                         document.location.href = "{{.RootPath}}/";
                     } else {
-                        let kickMessage = '{{.Translation.Get "kick-vote"}}'.format(parsed.data.voteCount, parsed.data.requiredVoteCount, parsed.data.playerName);
-                        if (parsed.data.voteCount >= parsed.data.requiredVoteCount) {
-                            kickMessage += ' {{.Translation.Get "player-kicked"}}';
-                        }
+                        let kickMessage = '{{.Translation.Get "player-kicked"}}'.format(parsed.data.playerName);
                         appendMessage("system-message", '{{.Translation.Get "system"}}', kickMessage);
                     }
                 } else if (parsed.type === "owner-change") {
@@ -1140,7 +1132,6 @@
                 } else if (parsed.type === "drawer-kicked") {
                     appendMessage("system-message", '{{.Translation.Get "system"}}', '{{.Translation.Get "drawer-kicked"}}');
                 } else if (parsed.type === "lobby-settings-changed") {
-                    votekickEnabled = parsed.data.enableVotekick;
                     rounds = parsed.data.rounds;
                     updateRoundsDisplay();
                     updateButtonVisibilities();
@@ -1148,7 +1139,6 @@
                         + '{{.Translation.Get "drawing-time-setting"}}: ' + parsed.data.drawingTime + "\n"
                         + '{{.Translation.Get "rounds-setting"}}: ' + parsed.data.rounds + "\n"
                         + '{{.Translation.Get "public-lobby-setting"}}: ' + parsed.data.public + "\n"
-                        + '{{.Translation.Get "enable-votekick-setting"}}: ' + parsed.data.enableVotekick + "\n"
                         + '{{.Translation.Get "max-players-setting"}}: ' + parsed.data.maxPlayers + "\n"
                         + '{{.Translation.Get "custom-words-chance-setting"}}: ' + parsed.data.customWordsChance + "%\n"
                         + '{{.Translation.Get "players-per-ip-limit-setting"}}: ' + parsed.data.clientsPerIpLimit);
@@ -1205,7 +1195,6 @@
             round = ready.round;
             rounds = ready.rounds;
             gameState = ready.gameState;
-            votekickEnabled = ready.votekickEnabled;
             drawingTimeSetting = ready.drawingTimeSetting;
             updateRoundsDisplay();
             updateButtonVisibilities();
@@ -1310,7 +1299,7 @@
                 lobbySettingsButton.style.display = "none";
             }
 
-            if (votekickEnabled) {
+            if (ownerID === ownID) {
                 kickButton.style.display = "initial";
             } else {
                 kickButton.style.display = "none";
