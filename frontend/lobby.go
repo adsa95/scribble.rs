@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"github.com/scribble-rs/scribble.rs/auth"
 	"log"
 	"net/http"
 	"strings"
@@ -24,7 +25,7 @@ type robotPageData struct {
 }
 
 // ssrEnterLobby opens a lobby, either opening it directly or asking for a lobby.
-func ssrEnterLobby(w http.ResponseWriter, r *http.Request) {
+func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	lobby, err := api.GetLobby(r)
 	if err != nil {
 		userFacingError(w, err.Error())
@@ -48,7 +49,7 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request) {
 
 	var pageData *lobbyPageData
 	lobby.Synchronized(func() {
-		player := api.GetPlayer(lobby, r)
+		player := lobby.GetPlayer(&u)
 
 		if player == nil {
 			if !lobby.HasFreePlayerSlot() {
@@ -61,9 +62,7 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			newPlayer := lobby.JoinPlayer(api.GetPlayername(r))
-
-			api.SetUsersessionCookie(w, newPlayer)
+			lobby.JoinPlayer(&u)
 		} else {
 			if player.Connected && player.GetWebsocket() != nil {
 				userFacingError(w, "It appears you already have an open tab for this lobby.")

@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"github.com/scribble-rs/scribble.rs/auth"
 	"log"
 	"net/http"
 
@@ -63,7 +64,7 @@ type LobbyCreatePageData struct {
 
 // ssrCreateLobby allows creating a lobby, optionally returning errors that
 // occurred during creation.
-func ssrCreateLobby(w http.ResponseWriter, r *http.Request) {
+func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	formParseError := r.ParseForm()
 	if formParseError != nil {
 		http.Error(w, formParseError.Error(), http.StatusBadRequest)
@@ -132,9 +133,7 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var playerName = api.GetPlayername(r)
-
-	player, lobby, createError := game.CreateLobby(playerName, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, clientsPerIPLimit, customWords)
+	player, lobby, createError := game.CreateLobby(&u, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, clientsPerIPLimit, customWords)
 	if createError != nil {
 		pageData.Errors = append(pageData.Errors, createError.Error())
 		templateError := pageTemplates.ExecuteTemplate(w, "lobby-create-page", pageData)
@@ -147,8 +146,6 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobby.WriteJSON = api.WriteJSON
 	player.SetLastKnownAddress(api.GetIPAddressFromRequest(r))
-
-	api.SetUsersessionCookie(w, player)
 
 	//We only add the lobby if we could do all necessary pre-steps successfully.
 	state.AddLobby(lobby)

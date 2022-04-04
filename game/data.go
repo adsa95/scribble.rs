@@ -1,12 +1,12 @@
 package game
 
 import (
+	"github.com/scribble-rs/scribble.rs/auth"
 	"strings"
 	"sync"
 	"time"
 
 	discordemojimap "github.com/Bios-Marcel/discordemojimap/v2"
-	"github.com/gofrs/uuid"
 	"github.com/gorilla/websocket"
 	"golang.org/x/text/cases"
 )
@@ -170,7 +170,7 @@ const MaxPlayerNameLength int = 30
 // Player represents a participant in a Lobby.
 type Player struct {
 	// userSession uniquely identifies the player.
-	userSession      string
+	user             *auth.User
 	ws               *websocket.Conn
 	socketMutex      *sync.Mutex
 	lastKnownAddress string
@@ -229,9 +229,9 @@ func (player *Player) GetWebsocketMutex() *sync.Mutex {
 	return player.socketMutex
 }
 
-// GetUserSession returns the players current user session.
-func (player *Player) GetUserSession() string {
-	return player.userSession
+// GetUser returns the players current user session.
+func (player *Player) GetUser() *auth.User {
+	return player.user
 }
 
 type PlayerState string
@@ -243,9 +243,9 @@ const (
 )
 
 // GetPlayer searches for a player, identifying them by usersession.
-func (lobby *Lobby) GetPlayer(userSession string) *Player {
+func (lobby *Lobby) GetPlayer(user *auth.User) *Player {
 	for _, player := range lobby.players {
-		if player.userSession == userSession {
+		if player.user.Id == user.Id {
 			return player
 		}
 	}
@@ -271,11 +271,11 @@ func (lobby *Lobby) AppendFill(fill *FillEvent) {
 	lobby.currentDrawing = append(lobby.currentDrawing, fill)
 }
 
-func createPlayer(name string) *Player {
+func createPlayer(user *auth.User) *Player {
 	return &Player{
-		Name:        SanitizeName(name),
-		ID:          uuid.Must(uuid.NewV4()).String(),
-		userSession: uuid.Must(uuid.NewV4()).String(),
+		Name:        user.TwitchName,
+		ID:          user.Id,
+		user:        user,
 		socketMutex: &sync.Mutex{},
 		State:       Guessing,
 	}

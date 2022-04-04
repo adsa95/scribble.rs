@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
 	"math/rand"
 	"net/http"
@@ -76,8 +78,34 @@ func main() {
 	//Setting the seed in order for the petnames to be random.
 	rand.Seed(time.Now().UnixNano())
 
-	api.SetupRoutes()
-	frontend.SetupRoutes()
+	jwtKey, jwtKeySet := os.LookupEnv("JWT_KEY")
+	jwtCookieName, jwtCookieNameSet := os.LookupEnv("JWT_COOKIE_NAME")
+	twitchClientId, twitchClientIdSet := os.LookupEnv("TWITCH_CLIENT_ID")
+	twitchClientSecret, twitchClientSecretSet := os.LookupEnv("TWITCH_CLIENT_SECRET")
+
+	if !jwtKeySet {
+		log.Fatalln("JWT_KEY not set")
+	} else if !twitchClientIdSet {
+		log.Fatalln("TWITCH_CLIENT_ID not set")
+	} else if !twitchClientSecretSet {
+		log.Fatalln("TWITCH_CLIENT_SECRET not set")
+	} else if !jwtCookieNameSet {
+		jwtCookieName = "usertoken"
+	}
+
+	authService := auth.Service{
+		JwtKey:        []byte(jwtKey),
+		JwtCookieName: jwtCookieName,
+	}
+
+	twitchClient := twitch.Client{
+		ClientId:     twitchClientId,
+		ClientSecret: twitchClientSecret,
+		RedirectURI:  "http://localhost:8080/ssrTwitchCallback",
+	}
+
+	api.SetupRoutes(authService)
+	frontend.SetupRoutes(authService, twitchClient)
 	state.LaunchCleanupRoutine()
 
 	signalChan := make(chan os.Signal, 1)

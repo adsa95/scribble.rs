@@ -2,8 +2,12 @@ package frontend
 
 import (
 	"embed"
+	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/twitch"
 	"html/template"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/scribble-rs/scribble.rs/api"
 	"github.com/scribble-rs/scribble.rs/translations"
@@ -44,13 +48,22 @@ type BasePageConfig struct {
 }
 
 // SetupRoutes registers the official webclient endpoints with the http package.
-func SetupRoutes() {
+func SetupRoutes(a auth.Service, t twitch.Client) {
+	authHandler := AuthHandler{
+		authService:  a,
+		twitchClient: t,
+	}
+
 	http.Handle(api.RootPath+"/resources/",
 		http.StripPrefix(api.RootPath,
 			http.FileServer(http.FS(frontendResourcesFS))))
+
 	http.HandleFunc(api.RootPath+"/", homePage)
-	http.HandleFunc(api.RootPath+"/ssrEnterLobby", ssrEnterLobby)
-	http.HandleFunc(api.RootPath+"/ssrCreateLobby", ssrCreateLobby)
+	http.HandleFunc(api.RootPath+"/ssrLogin", authHandler.ssrLogin)
+	http.HandleFunc(api.RootPath+"/ssrLogout", authHandler.ssrLogout)
+	http.HandleFunc(api.RootPath+"/ssrTwitchCallback", authHandler.ssrTwitchCallback)
+	http.HandleFunc(api.RootPath+"/ssrEnterLobby", requireUserOrRedirect(a, ssrEnterLobby))
+	http.HandleFunc(api.RootPath+"/ssrCreateLobby", requireUserOrRedirect(a, ssrCreateLobby))
 }
 
 // errorPageData represents the data that error.html requires to be displayed.
@@ -73,4 +86,15 @@ func userFacingError(w http.ResponseWriter, errorMessage string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func requireUserOrRedirect(a auth.Service, h func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
+	return a.RequireUser(h, loginPageRedirect)
+}
+
+func loginPageRedirect(w http.ResponseWriter, r *http.Request, e error) {
+	params := url.Values{}
+	params.Add("intended", strings.TrimPrefix(r.URL.String(), api.RootPath))
+
+	http.Redirect(w, r, api.RootPath+"/ssrLogin?"+params.Encode(), http.StatusFound)
 }

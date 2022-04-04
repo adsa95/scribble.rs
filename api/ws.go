@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/scribble-rs/scribble.rs/auth"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -20,16 +21,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func wsEndpoint(w http.ResponseWriter, r *http.Request) {
-	sessionCookie := GetUserSession(r)
-	if sessionCookie == "" {
-		//This issue can happen if you illegally request a websocket
-		//connection without ever having had a usersession or your
-		//client having deleted the usersession cookie.
-		http.Error(w, "you don't have access to this lobby;usersession not set", http.StatusUnauthorized)
-		return
-	}
-
+func wsEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
 	lobby, lobbyError := GetLobby(r)
 	if lobbyError != nil {
 		http.Error(w, lobbyError.Error(), http.StatusNotFound)
@@ -37,7 +29,7 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lobby.Synchronized(func() {
-		player := lobby.GetPlayer(sessionCookie)
+		player := lobby.GetPlayer(&user)
 		if player == nil {
 			http.Error(w, "you don't have access to this lobby;usersession unknown", http.StatusUnauthorized)
 			return

@@ -3,6 +3,7 @@ package game
 import (
 	"errors"
 	"fmt"
+	"github.com/scribble-rs/scribble.rs/auth"
 	"log"
 	"math"
 	"math/rand"
@@ -838,7 +839,7 @@ func (lobby *Lobby) triggerPlayersUpdate() {
 
 // CreateLobby creates a new lobby including the initial player (owner) and
 // optionally returns an error, if any occurred during creation.
-func CreateLobby(playerName, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance, clientsPerIPLimit int, customWords []string) (*Player, *Lobby, error) {
+func CreateLobby(user *auth.User, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance, clientsPerIPLimit int, customWords []string) (*Player, *Lobby, error) {
 	lobby := &Lobby{
 		LobbyID: uuid.Must(uuid.NewV4()).String(),
 		EditableLobbySettings: &EditableLobbySettings{
@@ -873,7 +874,7 @@ func CreateLobby(playerName, chosenLanguage string, publicLobby bool, drawingTim
 		}
 	}
 
-	player := createPlayer(playerName)
+	player := createPlayer(user)
 
 	lobby.players = append(lobby.players, player)
 	lobby.Owner = player
@@ -1018,8 +1019,8 @@ func (lobby *Lobby) GetAvailableWordHints(player *Player) []*WordHint {
 
 // JoinPlayer creates a new player object using the given name and adds it
 // to the lobbies playerlist. The new players is returned.
-func (lobby *Lobby) JoinPlayer(playerName string) *Player {
-	player := createPlayer(playerName)
+func (lobby *Lobby) JoinPlayer(user *auth.User) *Player {
+	player := createPlayer(user)
 
 	lobby.players = append(lobby.players, player)
 

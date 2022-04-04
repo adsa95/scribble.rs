@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/scribble-rs/scribble.rs/auth"
 	"net/http"
 	"strings"
 
@@ -58,7 +59,7 @@ func publicLobbies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createLobby(w http.ResponseWriter, r *http.Request) {
+func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	formParseError := r.ParseForm()
 	if formParseError != nil {
 		http.Error(w, formParseError.Error(), http.StatusBadRequest)
@@ -105,8 +106,7 @@ func createLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var playerName = GetPlayername(r)
-	player, lobby, createError := game.CreateLobby(playerName, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, clientsPerIPLimit, customWords)
+	player, lobby, createError := game.CreateLobby(&user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, clientsPerIPLimit, customWords)
 	if createError != nil {
 		http.Error(w, createError.Error(), http.StatusBadRequest)
 		return
@@ -114,9 +114,6 @@ func createLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobby.WriteJSON = WriteJSON
 	player.SetLastKnownAddress(GetIPAddressFromRequest(r))
-
-	SetUsersessionCookie(w, player)
-
 	lobbyData := CreateLobbyData(lobby)
 
 	encodingError := json.NewEncoder(w).Encode(lobbyData)
@@ -128,7 +125,7 @@ func createLobby(w http.ResponseWriter, r *http.Request) {
 	state.AddLobby(lobby)
 }
 
-func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request) {
+func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
 	lobby, success := getLobbyWithErrorHandling(w, r)
 	if !success {
 		return
@@ -137,7 +134,7 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request) {
 	var lobbyData *LobbyData
 
 	lobby.Synchronized(func() {
-		player := GetPlayer(lobby, r)
+		player := lobby.GetPlayer(&user)
 
 		if player == nil {
 			if !lobby.HasFreePlayerSlot() {
@@ -152,11 +149,8 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			newPlayer := lobby.JoinPlayer(GetPlayername(r))
+			newPlayer := lobby.JoinPlayer(&user)
 			newPlayer.SetLastKnownAddress(requestAddress)
-
-			// Use the players generated usersession and pass it as a cookie.
-			SetUsersessionCookie(w, newPlayer)
 		} else {
 			player.SetLastKnownAddress(GetIPAddressFromRequest(r))
 		}
@@ -172,23 +166,7 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// SetUsersessionCookie takes the players usersession and sets it as a cookie.
-func SetUsersessionCookie(w http.ResponseWriter, player *game.Player) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "usersession",
-		Value:    player.GetUserSession(),
-		Path:     "/",
-		SameSite: http.SameSiteStrictMode,
-	})
-}
-
-func editLobby(w http.ResponseWriter, r *http.Request) {
-	userSession := GetUserSession(r)
-	if userSession == "" {
-		http.Error(w, "no usersession supplied", http.StatusBadRequest)
-		return
-	}
-
+func editLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	lobby, success := getLobbyWithErrorHandling(w, r)
 	if !success {
 		return
@@ -219,7 +197,7 @@ func editLobby(w http.ResponseWriter, r *http.Request) {
 	publicLobby, publicLobbyInvalid := ParseBoolean("public", r.Form.Get("public"))
 
 	owner := lobby.Owner
-	if owner == nil || owner.GetUserSession() != userSession {
+	if owner == nil || owner.GetUser().Id != user.Id {
 		http.Error(w, "only the lobby owner can edit the lobby", http.StatusForbidden)
 		return
 	}
@@ -295,13 +273,13 @@ func getLobbyWithErrorHandling(w http.ResponseWriter, r *http.Request) (*game.Lo
 	return lobby, true
 }
 
-func lobbyEndpoint(w http.ResponseWriter, r *http.Request) {
+func lobbyEndpoint(w http.ResponseWriter, r *http.Request, u auth.User) {
 	if r.Method == http.MethodGet {
 		publicLobbies(w, r)
 	} else if r.Method == http.MethodPatch {
-		editLobby(w, r)
+		editLobby(w, r, u)
 	} else if r.Method == http.MethodPost || r.Method == http.MethodPut {
-		createLobby(w, r)
+		createLobby(w, r, u)
 	} else {
 		http.Error(w, fmt.Sprintf("method %s not supported", r.Method), http.StatusMethodNotAllowed)
 	}
@@ -383,49 +361,4 @@ func CreateLobbyData(lobby *game.Lobby) *LobbyData {
 		CanvasColor:            CanvasColor,
 		SuggestedBrushSizes:    SuggestedBrushSizes,
 	}
-}
-
-// GetUserSession accesses the usersession from an HTTP request and
-// returns the session. The session can either be in the cookie or in
-// the header. If no session can be found, an empty string is returned.
-func GetUserSession(r *http.Request) string {
-	sessionCookie, noCookieError := r.Cookie("usersession")
-	if noCookieError == nil && sessionCookie.Value != "" {
-		return sessionCookie.Value
-	}
-
-	session, ok := r.Header["Usersession"]
-	if ok {
-		return session[0]
-	}
-
-	return ""
-}
-
-// GetPlayer returns the player object that matches the usersession in the
-// supplied HTTP request and lobby. If no user session is set, we return nil.
-func GetPlayer(lobby *game.Lobby, r *http.Request) *game.Player {
-	return lobby.GetPlayer(GetUserSession(r))
-}
-
-// GetPlayername either retrieves the playername from a cookie, the URL form.
-// If no preferred name can be found, we return an empty string.
-func GetPlayername(r *http.Request) string {
-	parseError := r.ParseForm()
-	if parseError == nil {
-		username := r.Form.Get("username")
-		if username != "" {
-			return username
-		}
-	}
-
-	usernameCookie, noCookieError := r.Cookie("username")
-	if noCookieError == nil {
-		username := usernameCookie.Value
-		if username != "" {
-			return username
-		}
-	}
-
-	return ""
 }
