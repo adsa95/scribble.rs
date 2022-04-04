@@ -34,11 +34,6 @@
                             title="{{.Translation.Get "toggle-soundeffects"}}">
                             <img id="sound-toggle-label" class="header-button-image" />
                         </button>
-                        <button onclick="showNameChangeDialog()" class="dialog-button header-button"
-                            alt="{{.Translation.Get "change-your-name"}}"
-                            title="{{.Translation.Get "change-your-name"}}">
-                            <img src="{{.RootPath}}/resources/user.svg" class="header-button-image" />
-                        </button>
                         <button onclick="toggleFullscreen()" class="dialog-button header-button"
                             alt="{{.Translation.Get "toggle-fullscreen"}}"
                             title="{{.Translation.Get "toggle-fullscreen"}}">
@@ -98,17 +93,6 @@
 
                         <div id="start-dialog" class="center-dialog">
                             <span class="dialog-title">{{.Translation.Get "start-the-game"}}</span>
-                            <div class="center-dialog-content">
-                                <div style="display: flex; flex-direction: column;">
-                                    {{.Translation.Get "change-your-name"}}:
-                                    <div style="display: flex; flex-direction: row;">
-                                        <input class="namechange-field" type="text"
-                                            id="namechange-field-start-dialog"></input>
-                                        <button class="dialog-button namechange-apply-button"
-                                            onclick="changeName(document.getElementById('namechange-field-start-dialog').value)">{{.Translation.Get "apply"}}</button>
-                                    </div>
-                                </div>
-                            </div>
                             <div class="button-center-wrapper">
                                 <button class="dialog-button"
                                     onclick="startGame()">{{.Translation.Get "start"}}</button>
@@ -120,13 +104,6 @@
                             <div class="center-dialog-content">
                                 <div style="display: flex; flex-direction: column;">
                                     <p>{{.Translation.Get "waiting-for-host-to-start"}}</p>
-                                    {{.Translation.Get "change-your-name"}}:
-                                    <div style="display: flex; flex-direction: row;">
-                                        <input class="namechange-field" type="text"
-                                            id="namechange-field-unstarted-dialog"></input>
-                                        <button class="dialog-button namechange-apply-button"
-                                            onclick="changeName(document.getElementById('namechange-field-unstarted-dialog').value)">{{.Translation.Get "apply"}}</button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -135,22 +112,6 @@
                             <span class="dialog-title">{{.Translation.Get "waiting-for-word-selection"}}</span>
                             <div class="center-dialog-content">
                                 <span id="waitchoose-drawer"></span>&nbsp;{{.Translation.Get "is-choosing-word"}}
-                            </div>
-                        </div>
-
-                        <div id="namechange-dialog" class="center-dialog">
-                            <span class="dialog-title">{{.Translation.Get "change-your-name"}}</span>
-                            <div class="center-dialog-content">
-                                <form id="username-form"
-                                    onsubmit="changeName(document.getElementById('namechange-field').value);hideNameChangeDialog();return false">
-                                    <input class="namechange-field" type="text" id="namechange-field"></input>
-                                </form>
-                            </div>
-                            <div class="button-center-wrapper">
-                                <button class="dialog-button" type="submit"
-                                    form="username-form">{{.Translation.Get "save"}}</button>
-                                <button class="dialog-button" type="button"
-                                    onclick="hideNameChangeDialog()">{{.Translation.Get "close"}}</button>
                             </div>
                         </div>
 
@@ -499,10 +460,6 @@
         const unstartedDialog = document.getElementById("unstarted-dialog");
         const waitChooseDialog = document.getElementById("waitchoose-dialog");
         const waitChooseDrawerSpan = document.getElementById("waitchoose-drawer");
-        const namechangeDialog = document.getElementById("namechange-dialog");
-        const namechangeFieldUnstartedDialog = document.getElementById("namechange-field-unstarted-dialog");
-        const namechangeFieldStartDialog = document.getElementById("namechange-field-start-dialog");
-        const namechangeField = document.getElementById("namechange-field");
 
         const lobbySettingsButton = document.getElementById("lobby-settings-button");
         const kickButton = document.getElementById("kick-button");
@@ -624,32 +581,6 @@
 
         function hideKickDialog() {
             kickDialog.style.visibility = "hidden";
-        }
-
-        function showNameChangeDialog() {
-            namechangeDialog.style.visibility = "visible";
-            namechangeField.focus();
-        }
-
-        function hideNameChangeDialog() {
-            namechangeDialog.style.visibility = "hidden";
-        }
-
-        function changeName(name) {
-            //Avoid unnecessary traffic.
-            if (name !== ownName) {
-                socket.send(JSON.stringify({
-                    type: "name-change",
-                    data: name,
-                }));
-            }
-        }
-
-        function setUsernameLocally(name) {
-            ownName = name;
-            namechangeFieldUnstartedDialog.value = name;
-            namechangeFieldStartDialog.value = name;
-            namechangeField.value = name;
         }
 
         function toggleFullscreen() {
@@ -1022,22 +953,6 @@
                     handleReadyEvent(ready);
                 } else if (parsed.type === "update-players") {
                     applyPlayers(parsed.data);
-                } else if (parsed.type === "name-change") {
-                    const player = getPlayer(parsed.data.playerId);
-                    if (player !== null) {
-                        player.name = parsed.data.playerName;
-                    }
-
-                    const playernameSpan = document.getElementById("playername-" + parsed.data.playerId);
-                    if (playernameSpan !== null) {
-                        playernameSpan.innerText = parsed.data.playerName;
-                    }
-                    if (parsed.data.playerId === ownID) {
-                        setUsernameLocally(parsed.data.playerName);
-                    }
-                    if (parsed.data.playerId === drawerID) {
-                        waitChooseDrawerSpan.innerText = parsed.data.playerName;
-                    }
                 } else if (parsed.type === "correct-guess") {
                     playWav('{{.RootPath}}/resources/plop.wav');
 
@@ -1189,7 +1104,6 @@
         function handleReadyEvent(ready) {
             setRoundEndTime(ready.roundEndTime);
             ownerID = ready.ownerId;
-            setUsernameLocally(ready.playerName);
             allowDrawing = ready.allowDrawing;
             ownID = ready.playerId;
             round = ready.round;

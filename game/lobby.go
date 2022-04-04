@@ -231,12 +231,6 @@ func (lobby *Lobby) HandleEvent(raw []byte, received *GameEvent, player *Player)
 
 			advanceLobby(lobby)
 		}
-	} else if received.Type == "name-change" {
-		newName, isString := (received.Data).(string)
-		if !isString {
-			return fmt.Errorf("invalid data in name-change event: %v", received.Data)
-		}
-		handleNameChangeEvent(player, lobby, newName)
 	} else if received.Type == "request-drawing" {
 		//Since the client shouldn't be blocking to wait for the drawing, it's
 		//fine to emit the event if there's no drawing.
@@ -470,28 +464,6 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 type OwnerChangeEvent struct {
 	PlayerID   string `json:"playerId"`
 	PlayerName string `json:"playerName"`
-}
-
-type NameChangeEvent struct {
-	PlayerID   string `json:"playerId"`
-	PlayerName string `json:"playerName"`
-}
-
-func handleNameChangeEvent(caller *Player, lobby *Lobby, name string) {
-	oldName := caller.Name
-	newName := SanitizeName(name)
-
-	log.Printf("%s is now %s\n", oldName, newName)
-
-	//We'll avoid sending the event in this case, as it's useless, but still log
-	//the event, as it might be useful to know that this happened.
-	if oldName != newName {
-		caller.Name = newName
-		lobby.TriggerUpdateEvent("name-change", &NameChangeEvent{
-			PlayerID:   caller.ID,
-			PlayerName: newName,
-		})
-	}
 }
 
 // advanceLobbyPredefineDrawer is required in cases where the drawer is removed game
