@@ -37,8 +37,6 @@ func createDefaultLobbyCreatePageData() *LobbyCreatePageData {
 		Rounds:            "4",
 		MaxPlayers:        "12",
 		CustomWordsChance: "50",
-		ClientsPerIPLimit: "1",
-		EnableVotekick:    "true",
 		Language:          "english",
 	}
 }
@@ -57,8 +55,6 @@ type LobbyCreatePageData struct {
 	MaxPlayers        string
 	CustomWords       string
 	CustomWordsChance string
-	ClientsPerIPLimit string
-	EnableVotekick    string
 	Language          string
 }
 
@@ -90,8 +86,6 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 		MaxPlayers:        r.Form.Get("max_players"),
 		CustomWords:       r.Form.Get("custom_words"),
 		CustomWordsChance: r.Form.Get("custom_words_chance"),
-		ClientsPerIPLimit: r.Form.Get("clients_per_ip_limit"),
-		EnableVotekick:    r.Form.Get("enable_votekick"),
 		Language:          r.Form.Get("language"),
 	}
 

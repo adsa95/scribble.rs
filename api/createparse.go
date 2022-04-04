@@ -86,14 +86,6 @@ func ParseCustomWords(value string) ([]string, error) {
 	return result, nil
 }
 
-// ParseClientsPerIPLimit checks whether the given value is an integer between
-// the lower and upper bound of maximum clients per IP. All other invalid
-// input, including empty strings, will return an error.
-func ParseClientsPerIPLimit(value string) (int, error) {
-	return parseIntValue(value, game.LobbySettingBounds.MinClientsPerIPLimit,
-		game.LobbySettingBounds.MaxClientsPerIPLimit, "clients per IP limit")
-}
-
 // ParseCustomWordsChance checks whether the given value is an integer between
 // 0 and 100. All other invalid input, including empty strings, will return an
 // error.

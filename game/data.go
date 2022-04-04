@@ -2,11 +2,9 @@ package game
 
 import (
 	"github.com/scribble-rs/scribble.rs/auth"
-	"strings"
 	"sync"
 	"time"
 
-	discordemojimap "github.com/Bios-Marcel/discordemojimap/v2"
 	"github.com/gorilla/websocket"
 	"golang.org/x/text/cases"
 )
@@ -264,25 +262,6 @@ func createPlayer(user *auth.User) *Player {
 		socketMutex: &sync.Mutex{},
 		State:       Guessing,
 	}
-}
-
-//SanitizeName removes invalid characters from the players name, resolves
-//emoji codes, limits the name length and generates a new name if necessary.
-func SanitizeName(name string) string {
-	//We trim and handle emojis beforehand to avoid taking this into account
-	//when checking the name length, so we don't cut off too much of the name.
-	newName := discordemojimap.Replace(strings.TrimSpace(name))
-
-	//We don't want super-long names
-	if len(newName) > MaxPlayerNameLength {
-		return newName[:MaxPlayerNameLength+1]
-	}
-
-	if newName != "" {
-		return newName
-	}
-
-	return generatePlayerName()
 }
 
 // GameEvent contains an eventtype and optionally any data.
