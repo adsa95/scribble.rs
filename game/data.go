@@ -99,7 +99,7 @@ type Lobby struct {
 type EditableLobbySettings struct {
 	// MaxPlayers defines the maximum amount of players in a single lobby.
 	MaxPlayers int `json:"maxPlayers"`
-	// CustomWords are additional words that will be used in addition to the
+	// CustomWords are additional words that will be used in addition to thse
 	// predefined words.
 	// Public defines whether the lobby is being broadcast to clients asking
 	// for available lobbies.
@@ -108,9 +108,6 @@ type EditableLobbySettings struct {
 	// word on the next word prompt. This needs to be an integer between
 	// 0 and 100. The value represents a percentage.
 	CustomWordsChance int `json:"customWordsChance"`
-	// ClientsPerIPLimit helps preventing griefing by reducing each player
-	// to one tab per IP address.
-	ClientsPerIPLimit int `json:"clientsPerIpLimit"`
 	// DrawingTime is the amount of seconds that each player has available to
 	// finish their drawing.
 	DrawingTime int `json:"drawingTime"`
@@ -170,10 +167,9 @@ const MaxPlayerNameLength int = 30
 // Player represents a participant in a Lobby.
 type Player struct {
 	// userSession uniquely identifies the player.
-	user             *auth.User
-	ws               *websocket.Conn
-	socketMutex      *sync.Mutex
-	lastKnownAddress string
+	user        *auth.User
+	ws          *websocket.Conn
+	socketMutex *sync.Mutex
 	// disconnectTime is used to kick a player in case the lobby doesn't have
 	// space for new players. The player with the oldest disconnect.Time will
 	// get kicked.
@@ -195,17 +191,6 @@ type Player struct {
 	LastScore int         `json:"lastScore"`
 	Rank      int         `json:"rank"`
 	State     PlayerState `json:"state"`
-}
-
-// GetLastKnownAddress returns the last known IP-Address used for an HTTP request.
-func (player *Player) GetLastKnownAddress() string {
-	return player.lastKnownAddress
-}
-
-// SetLastKnownAddress sets the last known IP-Address used for an HTTP request.
-// Can be retrieved via GetLastKnownAddress().
-func (player *Player) SetLastKnownAddress(address string) {
-	player.lastKnownAddress = address
 }
 
 // GetWebsocket simply returns the players websocket connection. This method
@@ -334,23 +319,6 @@ func (lobby *Lobby) hasConnectedPlayersInternal() bool {
 	}
 
 	return false
-}
-
-// CanIPConnect checks whether the IP is still allowed regarding the lobbies
-// clients per IP address limit. This function should only be called for
-// players that aren't already in the lobby.
-func (lobby *Lobby) CanIPConnect(address string) bool {
-	var clientsWithSameIP int
-	for _, player := range lobby.GetPlayers() {
-		if player.GetLastKnownAddress() == address {
-			clientsWithSameIP++
-			if clientsWithSameIP >= lobby.ClientsPerIPLimit {
-				return false
-			}
-		}
-	}
-
-	return true
 }
 
 func (lobby *Lobby) IsPublic() bool {

@@ -42,15 +42,14 @@ func publicLobbies(w http.ResponseWriter, r *http.Request) {
 		//While one would expect locking the lobby here, it's not very
 		//important to get 100% consistent results here.
 		lobbyEntries = append(lobbyEntries, &LobbyEntry{
-			LobbyID:         lobby.LobbyID,
-			PlayerCount:     lobby.GetOccupiedPlayerSlots(),
-			MaxPlayers:      lobby.MaxPlayers,
-			Round:           lobby.Round,
-			Rounds:          lobby.Rounds,
-			DrawingTime:     lobby.DrawingTime,
-			CustomWords:     len(lobby.CustomWords) > 0,
-			MaxClientsPerIP: lobby.ClientsPerIPLimit,
-			Wordpack:        lobby.Wordpack,
+			LobbyID:     lobby.LobbyID,
+			PlayerCount: lobby.GetOccupiedPlayerSlots(),
+			MaxPlayers:  lobby.MaxPlayers,
+			Round:       lobby.Round,
+			Rounds:      lobby.Rounds,
+			DrawingTime: lobby.DrawingTime,
+			CustomWords: len(lobby.CustomWords) > 0,
+			Wordpack:    lobby.Wordpack,
 		})
 	}
 	encodingError := json.NewEncoder(w).Encode(lobbyEntries)
@@ -72,7 +71,6 @@ func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	maxPlayers, maxPlayersInvalid := ParseMaxPlayers(r.Form.Get("max_players"))
 	customWords, customWordsInvalid := ParseCustomWords(r.Form.Get("custom_words"))
 	customWordChance, customWordChanceInvalid := ParseCustomWordsChance(r.Form.Get("custom_words_chance"))
-	clientsPerIPLimit, clientsPerIPLimitInvalid := ParseClientsPerIPLimit(r.Form.Get("clients_per_ip_limit"))
 	publicLobby, publicLobbyInvalid := ParseBoolean("public", r.Form.Get("public"))
 
 	var requestErrors []string
@@ -94,9 +92,6 @@ func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	if customWordChanceInvalid != nil {
 		requestErrors = append(requestErrors, customWordChanceInvalid.Error())
 	}
-	if clientsPerIPLimitInvalid != nil {
-		requestErrors = append(requestErrors, clientsPerIPLimitInvalid.Error())
-	}
 	if publicLobbyInvalid != nil {
 		requestErrors = append(requestErrors, publicLobbyInvalid.Error())
 	}
@@ -106,14 +101,13 @@ func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 		return
 	}
 
-	player, lobby, createError := game.CreateLobby(&user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, clientsPerIPLimit, customWords)
+	_, lobby, createError := game.CreateLobby(&user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
 	if createError != nil {
 		http.Error(w, createError.Error(), http.StatusBadRequest)
 		return
 	}
 
 	lobby.WriteJSON = WriteJSON
-	player.SetLastKnownAddress(GetIPAddressFromRequest(r))
 	lobbyData := CreateLobbyData(lobby)
 
 	encodingError := json.NewEncoder(w).Encode(lobbyData)
@@ -142,17 +136,7 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) 
 				return
 			}
 
-			requestAddress := GetIPAddressFromRequest(r)
-
-			if !lobby.CanIPConnect(requestAddress) {
-				http.Error(w, "maximum amount of players per IP reached", http.StatusUnauthorized)
-				return
-			}
-
-			newPlayer := lobby.JoinPlayer(&user)
-			newPlayer.SetLastKnownAddress(requestAddress)
-		} else {
-			player.SetLastKnownAddress(GetIPAddressFromRequest(r))
+			lobby.JoinPlayer(&user)
 		}
 
 		lobbyData = CreateLobbyData(lobby)
@@ -193,7 +177,6 @@ func editLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	drawingTime, drawingTimeInvalid := ParseDrawingTime(r.Form.Get("drawing_time"))
 	rounds, roundsInvalid := ParseRounds(r.Form.Get("rounds"))
 	customWordChance, customWordChanceInvalid := ParseCustomWordsChance(r.Form.Get("custom_words_chance"))
-	clientsPerIPLimit, clientsPerIPLimitInvalid := ParseClientsPerIPLimit(r.Form.Get("clients_per_ip_limit"))
 	publicLobby, publicLobbyInvalid := ParseBoolean("public", r.Form.Get("public"))
 
 	owner := lobby.Owner
@@ -219,9 +202,6 @@ func editLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	if customWordChanceInvalid != nil {
 		requestErrors = append(requestErrors, customWordChanceInvalid.Error())
 	}
-	if clientsPerIPLimitInvalid != nil {
-		requestErrors = append(requestErrors, clientsPerIPLimitInvalid.Error())
-	}
 	if publicLobbyInvalid != nil {
 		requestErrors = append(requestErrors, publicLobbyInvalid.Error())
 	}
@@ -240,7 +220,6 @@ func editLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 
 		lobby.MaxPlayers = maxPlayers
 		lobby.CustomWordsChance = customWordChance
-		lobby.ClientsPerIPLimit = clientsPerIPLimit
 		lobby.Public = publicLobby
 		lobby.Rounds = rounds
 

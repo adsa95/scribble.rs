@@ -45,7 +45,6 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	}
 
 	translation, locale := determineTranslation(r)
-	requestAddress := api.GetIPAddressFromRequest(r)
 
 	var pageData *lobbyPageData
 	lobby.Synchronized(func() {
@@ -57,18 +56,12 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 				return
 			}
 
-			if !lobby.CanIPConnect(requestAddress) {
-				userFacingError(w, "Sorry, but you have exceeded the maximum number of clients per IP.")
-				return
-			}
-
 			lobby.JoinPlayer(&u)
 		} else {
 			if player.Connected && player.GetWebsocket() != nil {
 				userFacingError(w, "It appears you already have an open tab for this lobby.")
 				return
 			}
-			player.SetLastKnownAddress(requestAddress)
 		}
 
 		pageData = &lobbyPageData{
