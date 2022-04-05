@@ -30,6 +30,9 @@ type Lobby struct {
 	// players references all participants of the Lobby.
 	players []*Player
 
+	// observers references all observers of the Lobby
+	observers []*Observer
+
 	// Whether the game has started, is ongoing or already over.
 	State gameState
 	// drawer references the Player that is currently drawing.
@@ -89,7 +92,7 @@ type Lobby struct {
 
 	mutex *sync.Mutex
 
-	WriteJSON func(player *Player, object interface{}) error
+	WriteJSON func(player *SocketConnection, object interface{}) error
 }
 
 // EditableLobbySettings represents all lobby settings that are editable by
@@ -162,12 +165,42 @@ type Fill struct {
 // as the playername.
 const MaxPlayerNameLength int = 30
 
-// Player represents a participant in a Lobby.
-type Player struct {
-	// userSession uniquely identifies the player.
-	user        *auth.User
+type SocketConnection struct {
 	ws          *websocket.Conn
 	socketMutex *sync.Mutex
+	Connected   bool `json:"connected"`
+}
+
+// GetWebsocket simply returns the players websocket connection. This method
+// exists to encapsulate the websocket field and prevent accidental sending
+// the websocket data via the network.
+func (s *SocketConnection) GetWebsocket() *websocket.Conn {
+	return s.ws
+}
+
+// SetWebsocket sets the given connection as the players websocket connection.
+func (s *SocketConnection) SetWebsocket(socket *websocket.Conn) {
+	s.ws = socket
+}
+
+// GetWebsocketMutex returns a mutex for locking the websocket connection.
+// Since gorilla websockets shits it self when two calls happen at
+// the same time, we need a mutex per player, since each player has their
+// own socket. This getter extends to prevent accidentally sending the mutex
+// via the network.
+func (s *SocketConnection) GetWebsocketMutex() *sync.Mutex {
+	return s.socketMutex
+}
+
+type Observer struct {
+	*SocketConnection
+}
+
+// Player represents a participant in a Lobby.
+type Player struct {
+	*SocketConnection
+	// userSession uniquely identifies the player.
+	user *auth.User
 	// disconnectTime is used to kick a player in case the lobby doesn't have
 	// space for new players. The player with the oldest disconnect.Time will
 	// get kicked.
@@ -179,12 +212,6 @@ type Player struct {
 	Name string `json:"name"`
 	// Score is the points that the player got in the current Lobby.
 	Score int `json:"score"`
-	// Connected defines whether the players websocket connection is currently
-	// established. This has previously been in state but has been moved out
-	// in order to avoid losing the state on refreshing the page.
-	// While checking the websocket against nil would be enough, we still need
-	// this field for sending it via the APIs.
-	Connected bool `json:"connected"`
 	// Rank is the current ranking of the player in his Lobby
 	LastScore int         `json:"lastScore"`
 	Rank      int         `json:"rank"`
@@ -256,11 +283,23 @@ func (lobby *Lobby) AppendFill(fill *FillEvent) {
 
 func createPlayer(user *auth.User) *Player {
 	return &Player{
-		Name:        user.TwitchName,
-		ID:          user.Id,
-		user:        user,
-		socketMutex: &sync.Mutex{},
-		State:       Guessing,
+		SocketConnection: &SocketConnection{
+			socketMutex: &sync.Mutex{},
+			Connected:   false,
+		},
+		Name:  user.TwitchName,
+		ID:    user.Id,
+		user:  user,
+		State: Guessing,
+	}
+}
+
+func CreateObserver() *Observer {
+	return &Observer{
+		SocketConnection: &SocketConnection{
+			socketMutex: &sync.Mutex{},
+			Connected:   false,
+		},
 	}
 }
 
@@ -306,6 +345,10 @@ func (lobby *Lobby) IsPublic() bool {
 
 func (lobby *Lobby) GetPlayers() []*Player {
 	return lobby.players
+}
+
+func (lobby Lobby) GetObservers() []*Observer {
+	return lobby.observers
 }
 
 // GetOccupiedPlayerSlots counts the available slots which can be taken by new

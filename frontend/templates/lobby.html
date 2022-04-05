@@ -366,10 +366,10 @@
 
             if (location.protocol === "https:") {
                 console.log("Attempting secure socket connection on port " + location.port + "...");
-                socket = new WebSocket("wss://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws?lobby_id={{.LobbyID}}");
+                socket = new WebSocket("wss://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws/lobby?lobby_id={{.LobbyID}}");
             } else {
                 console.log("Attempting socket connection on port " + location.port + "...");
-                socket = new WebSocket("ws://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws?lobby_id={{.LobbyID}}");
+                socket = new WebSocket("ws://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws/lobby?lobby_id={{.LobbyID}}");
             }
 
             socket.onerror = error => {
@@ -1108,6 +1108,8 @@
             updateButtonVisibilities();
 
             if (ready.players && ready.players.length) {
+                console.log('Applying players')
+                console.log(ready.players)
                 applyPlayers(ready.players);
             }
             if (ready.currentDrawing && ready.currentDrawing.length) {

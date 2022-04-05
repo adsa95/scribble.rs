@@ -24,6 +24,48 @@ type robotPageData struct {
 	*api.LobbyData
 }
 
+func ssrObserveLobby(w http.ResponseWriter, r *http.Request) {
+	lobby, err := api.GetLobby(r)
+	if err != nil {
+		userFacingError(w, err.Error())
+		return
+	}
+
+	userAgent := strings.ToLower(r.UserAgent())
+	if !(strings.Contains(userAgent, "gecko") || strings.Contains(userAgent, "chrome") || strings.Contains(userAgent, "opera") || strings.Contains(userAgent, "safari")) {
+		templatingError := pageTemplates.ExecuteTemplate(w, "robot-page", &robotPageData{
+			BasePageConfig: currentBasePageConfig,
+			LobbyData:      api.CreateLobbyData(lobby),
+		})
+		if templatingError != nil {
+			log.Printf("error templating robot page: %d\n", templatingError)
+		}
+		return
+	}
+
+	translation, locale := determineTranslation(r)
+
+	var pageData *lobbyPageData
+	lobby.Synchronized(func() {
+		pageData = &lobbyPageData{
+			BasePageConfig: currentBasePageConfig,
+			LobbyData:      api.CreateLobbyData(lobby),
+			Translation:    translation,
+			Locale:         locale,
+		}
+	})
+
+	//If the pagedata isn't initialized, it means the synchronized block has exited.
+	//In this case we don't want to template the lobby, since an error has occurred
+	//and probably already has been handled.
+	if pageData != nil {
+		templateError := pageTemplates.ExecuteTemplate(w, "lobby-observe-page", pageData)
+		if templateError != nil {
+			log.Printf("Error templating lobby: %s\n", templateError)
+		}
+	}
+}
+
 // ssrEnterLobby opens a lobby, either opening it directly or asking for a lobby.
 func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	lobby, err := api.GetLobby(r)

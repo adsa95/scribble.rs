@@ -194,10 +194,13 @@ func (lobby *Lobby) HandleEvent(raw []byte, received *GameEvent, player *Player)
 			wordHintDataRevealed := &GameEvent{Type: "update-wordhint", Data: lobby.wordHintsShown}
 			for _, otherPlayer := range lobby.GetPlayers() {
 				if otherPlayer.State == Guessing {
-					lobby.WriteJSON(otherPlayer, wordHintData)
+					lobby.WriteJSON(otherPlayer.SocketConnection, wordHintData)
 				} else {
-					lobby.WriteJSON(otherPlayer, wordHintDataRevealed)
+					lobby.WriteJSON(otherPlayer.SocketConnection, wordHintDataRevealed)
 				}
+			}
+			for _, observer := range lobby.GetObservers() {
+				lobby.WriteJSON(observer.SocketConnection, wordHintData)
 			}
 		}
 	} else if received.Type == "kick" {
@@ -229,7 +232,7 @@ func (lobby *Lobby) HandleEvent(raw []byte, received *GameEvent, player *Player)
 		//Since the client shouldn't be blocking to wait for the drawing, it's
 		//fine to emit the event if there's no drawing.
 		if len(lobby.currentDrawing) != 0 {
-			lobby.WriteJSON(player, GameEvent{Type: "drawing", Data: lobby.currentDrawing})
+			lobby.WriteJSON(player.SocketConnection, GameEvent{Type: "drawing", Data: lobby.currentDrawing})
 		}
 	}
 
@@ -280,7 +283,7 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 				advanceLobby(lobby)
 			} else {
 				//Since the word has been guessed correctly, we reveal it.
-				lobby.WriteJSON(sender, GameEvent{Type: "update-wordhint", Data: lobby.wordHintsShown})
+				lobby.WriteJSON(sender.SocketConnection, GameEvent{Type: "update-wordhint", Data: lobby.wordHintsShown})
 				recalculateRanks(lobby)
 				lobby.triggerPlayersUpdate()
 			}
@@ -289,7 +292,7 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 			//This allows other players to guess the word by watching what the
 			//other players are misstyping.
 			sendMessageToAll(trimmedMessage, sender, lobby)
-			lobby.WriteJSON(sender, GameEvent{Type: "close-guess", Data: trimmedMessage})
+			lobby.WriteJSON(sender.SocketConnection, GameEvent{Type: "close-guess", Data: trimmedMessage})
 		} else {
 			sendMessageToAll(trimmedMessage, sender, lobby)
 		}
@@ -338,8 +341,11 @@ func sendMessageToAll(message string, sender *Player, lobby *Lobby) {
 		AuthorID: sender.ID,
 		Content:  discordemojimap.Replace(message),
 	}}
-	for _, target := range lobby.players {
-		lobby.WriteJSON(target, messageEvent)
+	for _, player := range lobby.players {
+		lobby.WriteJSON(player.SocketConnection, messageEvent)
+	}
+	for _, observer := range lobby.observers {
+		lobby.WriteJSON(observer.SocketConnection, messageEvent)
 	}
 }
 
@@ -351,7 +357,7 @@ func (lobby *Lobby) sendMessageToAllNonGuessing(message string, sender *Player) 
 	}}
 	for _, target := range lobby.players {
 		if target.State != Guessing {
-			lobby.WriteJSON(target, messageEvent)
+			lobby.WriteJSON(target.SocketConnection, messageEvent)
 		}
 	}
 }
@@ -392,7 +398,7 @@ func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 
 	//We send the kick event to all players, since it was a valid vote.
 	for _, otherPlayer := range lobby.players {
-		lobby.WriteJSON(otherPlayer, kickEvent)
+		lobby.WriteJSON(otherPlayer.SocketConnection, kickEvent)
 	}
 
 	kickPlayer(lobby, playerToKick, playerToKickIndex)
@@ -523,16 +529,16 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 			lobby.State = GameOver
 
 			for _, player := range lobby.players {
-				readyData := generateReadyData(lobby, player)
+				readyData := generatePlayerReadyData(lobby, player)
 				//The drawing is always available on the client, as the
 				//game-over event is only sent to already connected players.
 				readyData.CurrentDrawing = nil
 
-				lobby.WriteJSON(player, GameEvent{
+				lobby.WriteJSON(player.SocketConnection, GameEvent{
 					Type: "game-over",
 					Data: &GameOverEvent{
 						PreviousWord: previousWord,
-						Ready:        readyData,
+						PlayerReady:  readyData,
 					}})
 			}
 
@@ -562,7 +568,7 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 		PreviousWord: previousWord,
 	})
 
-	lobby.WriteJSON(lobby.drawer, &GameEvent{Type: "your-turn", Data: lobby.wordChoice})
+	lobby.WriteJSON(lobby.drawer.SocketConnection, &GameEvent{Type: "your-turn", Data: lobby.wordChoice})
 }
 
 // advanceLobby will either start the game or jump over to the next turn.
@@ -577,7 +583,7 @@ func advanceLobby(lobby *Lobby) {
 // is usually part of the "next-turn" event, which we don't send, since the
 // game is over already.
 type GameOverEvent struct {
-	*Ready
+	*PlayerReady
 	PreviousWord string `json:"previousWord"`
 }
 
@@ -671,8 +677,11 @@ func (lobby *Lobby) tickLogic(expectedTicker *time.Ticker) bool {
 					wordHintData := &GameEvent{Type: "update-wordhint", Data: lobby.wordHints}
 					for _, otherPlayer := range lobby.GetPlayers() {
 						if otherPlayer.State == Guessing {
-							lobby.WriteJSON(otherPlayer, wordHintData)
+							lobby.WriteJSON(otherPlayer.SocketConnection, wordHintData)
 						}
+					}
+					for _, observer := range lobby.GetObservers() {
+						lobby.WriteJSON(observer.SocketConnection, wordHintData)
 					}
 					break
 				}
@@ -787,15 +796,23 @@ func (lobby *Lobby) selectWord(wordChoiceIndex int) {
 func (lobby *Lobby) sendDataToEveryoneExceptSender(sender *Player, data interface{}) {
 	for _, otherPlayer := range lobby.GetPlayers() {
 		if otherPlayer != sender {
-			lobby.WriteJSON(otherPlayer, data)
+			lobby.WriteJSON(otherPlayer.SocketConnection, data)
 		}
+	}
+
+	for _, observer := range lobby.GetObservers() {
+		lobby.WriteJSON(observer.SocketConnection, data)
 	}
 }
 
 func (lobby *Lobby) TriggerUpdateEvent(eventType string, data interface{}) {
 	event := &GameEvent{Type: eventType, Data: data}
 	for _, otherPlayer := range lobby.GetPlayers() {
-		lobby.WriteJSON(otherPlayer, event)
+		lobby.WriteJSON(otherPlayer.SocketConnection, event)
+	}
+
+	for _, observer := range lobby.GetObservers() {
+		lobby.WriteJSON(observer.SocketConnection, event)
 	}
 }
 
@@ -858,14 +875,18 @@ type Message struct {
 	Content string `json:"content"`
 }
 
-// Ready represents the initial state that a user needs upon connection.
+// PlayerReady represents the initial state that a user needs upon connection.
 // This includes all the necessary things for properly running a client
 // without receiving any more data.
-type Ready struct {
+type PlayerReady struct {
 	PlayerID     string `json:"playerId"`
 	PlayerName   string `json:"playerName"`
 	AllowDrawing bool   `json:"allowDrawing"`
 
+	ObserverReady
+}
+
+type ObserverReady struct {
 	VotekickEnabled    bool          `json:"votekickEnabled"`
 	GameState          gameState     `json:"gameState"`
 	OwnerID            string        `json:"ownerId"`
@@ -878,18 +899,42 @@ type Ready struct {
 	CurrentDrawing     []interface{} `json:"currentDrawing"`
 }
 
-func generateReadyData(lobby *Lobby, player *Player) *Ready {
-	ready := &Ready{
+func generatePlayerReadyData(lobby *Lobby, player *Player) *PlayerReady {
+	ready := &PlayerReady{
 		PlayerID:     player.ID,
 		AllowDrawing: player.State == Drawing,
 		PlayerName:   player.Name,
 
+		ObserverReady: ObserverReady{
+			GameState:          lobby.State,
+			OwnerID:            lobby.Owner.ID,
+			Round:              lobby.Round,
+			Rounds:             lobby.Rounds,
+			DrawingTimeSetting: lobby.DrawingTime,
+			WordHints:          lobby.GetAvailableWordHints(player.State),
+			Players:            lobby.players,
+			CurrentDrawing:     lobby.currentDrawing,
+		},
+	}
+
+	if lobby.State != Ongoing {
+		//Clients should interpret 0 as "time over", unless the gamestate isn't "ongoing"
+		ready.RoundEndTime = 0
+	} else {
+		ready.RoundEndTime = int(lobby.RoundEndTime - getTimeAsMillis())
+	}
+
+	return ready
+}
+
+func generateObserverReadyData(lobby *Lobby) *ObserverReady {
+	ready := &ObserverReady{
 		GameState:          lobby.State,
 		OwnerID:            lobby.Owner.ID,
 		Round:              lobby.Round,
 		Rounds:             lobby.Rounds,
 		DrawingTimeSetting: lobby.DrawingTime,
-		WordHints:          lobby.GetAvailableWordHints(player),
+		WordHints:          lobby.GetAvailableWordHints(Standby),
 		Players:            lobby.players,
 		CurrentDrawing:     lobby.currentDrawing,
 	}
@@ -904,16 +949,31 @@ func generateReadyData(lobby *Lobby, player *Player) *Ready {
 	return ready
 }
 
+func (lobby *Lobby) OnObserverConnectUnsynchronized(observer *Observer) {
+	observer.Connected = true
+	lobby.WriteJSON(observer.SocketConnection, GameEvent{Type: "ready", Data: generateObserverReadyData(lobby)})
+}
+
+func (lobby *Lobby) OnObserverDisconnect(observer *Observer) {
+	//We want to avoid calling the handler twice.
+	if observer.ws == nil {
+		return
+	}
+
+	observer.Connected = false
+	observer.ws = nil
+}
+
 func (lobby *Lobby) OnPlayerConnectUnsynchronized(player *Player) {
 	player.Connected = true
 	recalculateRanks(lobby)
-	lobby.WriteJSON(player, GameEvent{Type: "ready", Data: generateReadyData(lobby, player)})
+	lobby.WriteJSON(player.SocketConnection, GameEvent{Type: "ready", Data: generatePlayerReadyData(lobby, player)})
 
 	//This state is reached if the player reconnects before having chosen a word.
 	//This can happen if the player refreshes his browser page or the socket
 	//loses connection and reconnects quickly.
 	if lobby.drawer == player && lobby.CurrentWord == "" {
-		lobby.WriteJSON(lobby.drawer, &GameEvent{Type: "your-turn", Data: lobby.wordChoice})
+		lobby.WriteJSON(lobby.drawer.SocketConnection, &GameEvent{Type: "your-turn", Data: lobby.wordChoice})
 	}
 
 	event := &GameEvent{Type: "update-players", Data: lobby.players}
@@ -922,8 +982,11 @@ func (lobby *Lobby) OnPlayerConnectUnsynchronized(player *Player) {
 		//to the ready event being sent. Therefeore it'd be wasteful to send
 		//that player and update event for players.
 		if otherPlayer != player {
-			lobby.WriteJSON(otherPlayer, event)
+			lobby.WriteJSON(otherPlayer.SocketConnection, event)
 		}
+	}
+	for _, observer := range lobby.GetObservers() {
+		lobby.WriteJSON(observer.SocketConnection, event)
 	}
 }
 
@@ -957,11 +1020,11 @@ func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
 // GetAvailableWordHints returns a WordHint array depending on the players
 // game state, since people that are drawing or have already guessed correctly
 // can see all hints.
-func (lobby *Lobby) GetAvailableWordHints(player *Player) []*WordHint {
+func (lobby *Lobby) GetAvailableWordHints(state PlayerState) []*WordHint {
 	//The draw simple gets every character as a word-hint. We basically abuse
 	//the hints for displaying the word, instead of having yet another GUI
 	//element that wastes space.
-	if player.State == Drawing || player.State == Standby {
+	if state == Drawing || state == Standby {
 		return lobby.wordHintsShown
 	} else {
 		return lobby.wordHints
@@ -976,6 +1039,23 @@ func (lobby *Lobby) JoinPlayer(user *auth.User) *Player {
 	lobby.players = append(lobby.players, player)
 
 	return player
+}
+
+func (lobby *Lobby) JoinObserver() *Observer {
+	observer := CreateObserver()
+
+	lobby.observers = append(lobby.observers, observer)
+
+	return observer
+}
+
+func (lobby *Lobby) LeaveObserver(observer *Observer) {
+	for i, ob := range lobby.observers {
+		if ob == observer {
+			lobby.observers = append(lobby.observers[:i], lobby.observers[i+1:]...)
+			return
+		}
+	}
 }
 
 func (lobby *Lobby) canDraw(player *Player) bool {
@@ -1000,6 +1080,6 @@ func (lobby *Lobby) Shutdown() {
 
 	shutdownEvent := GameEvent{Type: "shutdown"}
 	for _, player := range lobby.players {
-		lobby.WriteJSON(player, shutdownEvent)
+		lobby.WriteJSON(player.SocketConnection, shutdownEvent)
 	}
 }

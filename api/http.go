@@ -25,8 +25,10 @@ func init() {
 // SetupRoutes registers the /v1/ endpoints with the http package.
 func SetupRoutes(authService auth.Service) {
 	http.HandleFunc(RootPath+"/v1/stats", statsEndpoint)
+
 	//The websocket is shared between the public API and the official client
-	http.HandleFunc(RootPath+"/v1/ws", authService.RequireUser(wsEndpoint, HttpUnauthorized))
+	http.HandleFunc(RootPath+"/v1/ws/lobby", authService.RequireUser(wsLobbyEndpoint, HttpUnauthorized))
+	http.HandleFunc(RootPath+"/v1/ws/lobby/observe", wsObserveEndpoint)
 
 	//These exist only for the public API. We version them in order to ensure
 	//backwards compatibility as far as possible.

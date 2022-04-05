@@ -21,7 +21,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func wsEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
+func wsLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
 	lobby, lobbyError := GetLobby(r)
 	if lobbyError != nil {
 		http.Error(w, lobbyError.Error(), http.StatusNotFound)
@@ -51,11 +51,11 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
 			return nil
 		})
 
-		go wsListen(lobby, player, ws)
+		go wsListenToPlayer(lobby, player, ws)
 	})
 }
 
-func wsListen(lobby *game.Lobby, player *game.Player, socket *websocket.Conn) {
+func wsListenToPlayer(lobby *game.Lobby, player *game.Player, socket *websocket.Conn) {
 	//Workaround to prevent crash, since not all kind of
 	//disconnect errors are cleanly caught by gorilla websockets.
 	defer func() {
@@ -88,7 +88,7 @@ func wsListen(lobby *game.Lobby, player *game.Player, socket *websocket.Conn) {
 			err := json.Unmarshal(data, received)
 			if err != nil {
 				log.Printf("Error unmarshalling message: %s\n", err)
-				sendError := WriteJSON(player, game.GameEvent{Type: "system-message", Data: fmt.Sprintf("An error occurred trying to read your request, please report the error via GitHub: %s!", err)})
+				sendError := WriteJSON(player.SocketConnection, game.GameEvent{Type: "system-message", Data: fmt.Sprintf("An error occurred trying to read your request, please report the error via GitHub: %s!", err)})
 				if sendError != nil {
 					log.Printf("Error sending errormessage: %s\n", sendError)
 				}
@@ -103,9 +103,68 @@ func wsListen(lobby *game.Lobby, player *game.Player, socket *websocket.Conn) {
 	}
 }
 
+func wsObserveEndpoint(w http.ResponseWriter, r *http.Request) {
+	lobby, lobbyError := GetLobby(r)
+	if lobbyError != nil {
+		http.Error(w, lobbyError.Error(), http.StatusNotFound)
+		return
+	}
+
+	lobby.Synchronized(func() {
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		log.Println("Anonymous observer has connected")
+
+		observer := lobby.JoinObserver()
+		observer.SetWebsocket(ws)
+		lobby.OnObserverConnectUnsynchronized(observer)
+
+		ws.SetCloseHandler(func(code int, text string) error {
+			lobby.OnObserverDisconnect(observer)
+			return nil
+		})
+
+		go wsListenToObserver(lobby, observer, ws)
+	})
+}
+
+func wsListenToObserver(lobby *game.Lobby, observer *game.Observer, socket *websocket.Conn) {
+	//Workaround to prevent crash, since not all kind of
+	//disconnect errors are cleanly caught by gorilla websockets.
+	defer func() {
+		err := recover()
+		if err != nil {
+			log.Printf("Error occurred in wsListen.\n\tError: %s\n\tStack %s\n", err, string(debug.Stack()))
+			lobby.OnObserverDisconnect(observer)
+		}
+	}()
+
+	for {
+		_, _, err := socket.ReadMessage()
+		if err != nil {
+			if websocket.IsCloseError(err) || websocket.IsUnexpectedCloseError(err) ||
+				//This happens when the server closes the connection. It will cause 1000 retries followed by a panic.
+				strings.Contains(err.Error(), "use of closed network connection") {
+				//Make sure that the sockethandler is called
+				lobby.OnObserverDisconnect(observer)
+				//If the error is fatal, we stop listening for more messages.
+				return
+			}
+
+			log.Printf("Error reading from socket: %s\n", err)
+			//If the error doesn't seem fatal we attempt listening for more messages.
+			continue
+		}
+	}
+}
+
 // WriteJSON marshals the given input into a JSON string and sends it to the
 // player using the currently established websocket connection.
-func WriteJSON(player *game.Player, object interface{}) error {
+func WriteJSON(player *game.SocketConnection, object interface{}) error {
 	player.GetWebsocketMutex().Lock()
 	defer player.GetWebsocketMutex().Unlock()
 

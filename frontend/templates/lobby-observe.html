@@ -1,0 +1,902 @@
+{{define "lobby-observe-page"}}
+<!DOCTYPE html>
+<html lang="{{.Locale}}">
+
+<head>
+    <title>Scribble.rs - Game</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=0.75 maximum-scale=0.75, user-scalable=0">
+    {{template "non-static-css-decl" .}}
+    <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/base.css" />
+    <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/lobby.css" />
+    {{template "favicon-decl" .}}
+</head>
+
+<body>
+    <div class="content-wrapper">
+        <noscript><span class="noscript">{{.Translation.Get "requires-js"}}</span></noscript>
+
+        <div id="lobby">
+            <div id="lobby-header">
+                <div id="round-container">
+                    <span>{{.Translation.Get "round"}}&nbsp;</span>
+                    <span id="rounds"></span>
+                    <span id="max-rounds"></span>
+                </div>
+
+                <div id="lobby-header-center-element">
+                    <div>
+                        <!-- this button is basically behaving like a checkbox, but in order to
+                    have a uniform look with the other buttons in the header, we are not using
+                    a checkbox anymore. -->
+                        <button onclick="toggleSound()" class="dialog-button header-button"
+                            alt="{{.Translation.Get "toggle-soundeffects"}}"
+                            title="{{.Translation.Get "toggle-soundeffects"}}">
+                            <img id="sound-toggle-label" class="header-button-image" />
+                        </button>
+                        <button onclick="toggleFullscreen()" class="dialog-button header-button"
+                            alt="{{.Translation.Get "toggle-fullscreen"}}"
+                            title="{{.Translation.Get "toggle-fullscreen"}}">
+                            <img src="{{.RootPath}}/resources/fullscreen.svg" class="header-button-image" />
+                        </button>
+                    </div>
+                    <div id="word-container"></div>
+                </div>
+
+                <div id="time-left">
+                    <img src=" {{.RootPath}}/resources/clock.svg" class="header-button-image" />
+                    <div id="time-left-value">∞</div>
+                </div>
+            </div>
+
+            <div id="player-container"></div>
+
+            <div id="drawing-board-wrapper">
+                <div id="drawing-board-inner-wrapper">
+                    <canvas id="drawing-board" style="cursor: not-allowed"></canvas>
+
+                    <!-- The so called "center dialogs" are divs that float above the canvas.
+                    They are are always both horizontally and vertically. They can bever be
+                    as big as the canvas and are usually closable, as long as it makes sense.
+                    The can be seen as a new "window" and prevent touch and pointer events
+                    from reaching the canvas. Technically there could be more than one dialog
+                    visible at a time, but they'll be layered and there's no rule as to how. -->
+                    <div id="center-dialogs">
+                        <div id="unstarted-dialog" class="center-dialog">
+                            <span class="dialog-title">{{.Translation.Get "game-not-started-title"}}</span>
+                            <div class="center-dialog-content">
+                                <div style="display: flex; flex-direction: column;">
+                                    <p>{{.Translation.Get "waiting-for-host-to-start"}}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="waitchoose-dialog" class="center-dialog">
+                            <span class="dialog-title">{{.Translation.Get "waiting-for-word-selection"}}</span>
+                            <div class="center-dialog-content">
+                                <span id="waitchoose-drawer"></span>&nbsp;{{.Translation.Get "is-choosing-word"}}
+                            </div>
+                        </div>
+
+                        <div id="game-over-dialog" class="center-dialog">
+                            <span id="game-over-dialog-title" class="dialog-title">Game over!</span>
+                            <div class="center-dialog-content">
+                                <div id="game-over-scoreboard"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat">
+                <div id="message-container"></div>
+            </div>
+        </div>
+
+        {{template "footer" .}}
+    </div>
+
+    <script type="text/javascript" src="{{.RootPath}}/resources/floodfill.js"></script>
+    <script type="text/javascript">
+        String.prototype.format = function () {
+            return [...arguments].reduce((p, c) => p.replace(/%s/, c), this);
+        };
+
+        let socketIsConnecting = false;
+        let hasSocketEverConnected = false;
+        let socket;
+        function connectToWebsocket() {
+            if (socketIsConnecting === true) {
+                return;
+            }
+
+            socketIsConnecting = true;
+
+            if (location.protocol === "https:") {
+                console.log("Attempting secure socket connection on port " + location.port + "...");
+                socket = new WebSocket("wss://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws/lobby/observe?lobby_id={{.LobbyID}}");
+            } else {
+                console.log("Attempting socket connection on port " + location.port + "...");
+                socket = new WebSocket("ws://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws/lobby/observe?lobby_id={{.LobbyID}}");
+            }
+
+            socket.onerror = error => {
+                //Is not connected and we haven't yet said that we are done trying to
+                //connect, this means that we could never even establish a connection.
+                if (socket.readyState != 1 && !hasSocketEverConnected) {
+                    socketIsConnecting = false;
+                    showTextDialog("connection-error-dialog",
+                        '{{.Translation.Get "error-connecting"}}',
+                        '{{.Translation.Get "error-connecting-text"}}');
+                    console.log("Error establishing connection: ", error);
+                } else {
+                    console.log("Socket error: ", error)
+                }
+            };
+
+            socket.onopen = () => {
+                closeDialog(reconnectDialogId);
+
+                hasSocketEverConnected = true;
+                socketIsConnecting = false;
+
+                socket.onclose = event => {
+                    //We want to avoid handling the error multiple times and showing the incorrect dialogs.
+                    socket.onerror = null;
+
+                    console.log("Socket Closed Connection: ", event);
+                    console.log("Attempting to reestablish socket connection.");
+                    showReconnectDialogIfNotShown();
+                    connectToWebsocket();
+                };
+
+                registerMessageHandler(socket);
+
+                console.log("Successfully Connected");
+            };
+        }
+
+        const reconnectDialogId = "reconnect-dialog";
+        function showReconnectDialogIfNotShown() {
+            const previousReconnectDialog = document.getElementById(reconnectDialogId);
+
+            //Since the content is constant, there's no need to ever show two.
+            if (previousReconnectDialog === undefined || previousReconnectDialog === null) {
+                showTextDialog(reconnectDialogId, '{{.Translation.Get "connection-lost"}}',
+                    '{{.Translation.Get "connection-lost-text"}}');
+            }
+        }
+
+        connectToWebsocket();
+
+        //In order to avoid automatically canceling the socket connection, we keep
+        //sending dummy events every 5 seconds. This was a problem on Heroku. If
+        //a player took a very long time to choose a word, the connection of all
+        //players could be killed and even cause the lobby being closed. Since
+        //that's very frustrating, we want to avoid that.
+        window.setInterval(() => {
+            socket.send(JSON.stringify({ type: "keep-alive" }));
+        }, 5000);
+
+        //Makes sure that the server notices that the player disconnects.
+        //Otherwise a refresh (on chromium based browsers) can lead to the server
+        //thinking that there's already an open tab with this lobby.
+        window.onbeforeunload = () => {
+            //Avoid unintentionally reestablishing connection.
+            socket.onclose = null;
+            socket.close();
+        };
+
+        const playerContainer = document.getElementById("player-container");
+        const wordContainer = document.getElementById("word-container");
+        const chat = document.getElementById("chat");
+        const messageContainer = document.getElementById("message-container");
+        const roundSpan = document.getElementById("rounds");
+        const maxRoundSpan = document.getElementById("max-rounds");
+        const timeLeftValue = document.getElementById("time-left-value");
+        const drawingBoard = document.getElementById("drawing-board");
+
+        const centerDialogs = document.getElementById("center-dialogs");
+
+        const unstartedDialog = document.getElementById("unstarted-dialog");
+        const waitChooseDialog = document.getElementById("waitchoose-dialog");
+        const waitChooseDrawerSpan = document.getElementById("waitchoose-drawer");
+
+        const startDialog = document.getElementById("start-dialog");
+        const gameOverDialog = document.getElementById("game-over-dialog");
+        const gameOverDialogTitle = document.getElementById("game-over-dialog-title");
+        const gameOverScoreboard = document.getElementById("game-over-scoreboard");
+
+        const soundToggleLabel = document.getElementById("sound-toggle-label");
+        let sound = localStorage.getItem("sound") !== "false";
+        updateSoundIcon();
+
+        function showTextDialog(id, title, message) {
+            const messageNode = document.createElement("span");
+            messageNode.innerText = message;
+            showDialog(id, title, messageNode);
+        }
+
+        function showDialog(id, title, contentNode, buttonBar) {
+            const newDialog = document.createElement("div");
+            newDialog.classList.add("center-dialog");
+            if (id !== null && id !== "") {
+                newDialog.id = id;
+            }
+
+            const dialogTitle = document.createElement("span");
+            dialogTitle.classList.add("dialog-title");
+            dialogTitle.innerText = title;
+            newDialog.appendChild(dialogTitle);
+
+            const dialogContent = document.createElement("div");
+            dialogContent.classList.add("center-dialog-content");
+            dialogContent.appendChild(contentNode);
+            newDialog.appendChild(dialogContent);
+
+            if (buttonBar !== null && buttonBar !== undefined) {
+                newDialog.appendChild(buttonBar);
+            }
+
+            newDialog.style.visibility = "visible";
+            centerDialogs.appendChild(newDialog);
+        }
+
+        function closeDialog(id) {
+            const dialog = document.getElementById(id);
+            if (dialog !== undefined && dialog !== null) {
+                const parent = dialog.parentElement;
+                if (parent !== undefined && parent !== null) {
+                    parent.removeChild(dialog);
+                }
+            }
+        }
+
+        const helpDialogId = "help-dialog";
+        function showHelpDialog() {
+            closeDialog(helpDialogId);
+            const controlsLabel = document.createElement("b");
+            controlsLabel.innerText = '{{.Translation.Get "controls"}}';
+
+            const controlsTextOne = document.createElement("p");
+            controlsTextOne.innerText = '{{.Translation.Get "switch-tools-intro"}}:';
+
+            const controlsTextTwo = document.createElement("p");
+            controlsTextTwo.innerHTML = '{{.Translation.Get "pencil"}}: <kbd>Q</kbd><br/>' +
+                '{{.Translation.Get "fill-bucket"}}: <kbd>W</kbd><br/>' +
+                '{{.Translation.Get "eraser"}}: <kbd>E</kbd><br/>';
+
+            const controlsTextThree = document.createElement("p");
+            controlsTextThree.innerHTML = '{{printf (.Translation.Get "switch-pencil-sizes") "<kbd>1</kbd>" "<kbd>4</kbd>"}}';
+
+            const closeButton = document.createElement("button");
+            closeButton.innerText = '{{.Translation.Get "close"}}';
+            closeButton.classList.add("dialog-button");
+            closeButton.addEventListener("click", event => {
+                closeDialog(helpDialogId)
+            })
+
+            const buttonBar = document.createElement("div");
+            buttonBar.classList.add("button-center-wrapper");
+            buttonBar.appendChild(closeButton);
+
+            const dialogContent = document.createElement("div");
+            dialogContent.appendChild(controlsLabel)
+            dialogContent.appendChild(controlsTextOne);
+            dialogContent.appendChild(controlsTextTwo);
+            dialogContent.appendChild(controlsTextThree);
+
+            showDialog(helpDialogId, '{{.Translation.Get "help"}}', dialogContent, buttonBar);
+        }
+
+        function toggleFullscreen() {
+            if (document.fullscreen) {
+                document.exitFullscreen();
+            } else {
+                document.body.requestFullscreen();
+            }
+        }
+
+        function toggleSound() {
+            sound = !sound;
+            localStorage.setItem("sound", sound.toString());
+            updateSoundIcon();
+        }
+
+        function updateSoundIcon() {
+            if (sound) {
+                soundToggleLabel.src = "{{.RootPath}}/resources/sound.svg";
+            } else {
+                soundToggleLabel.src = "{{.RootPath}}/resources/no-sound.svg";
+            }
+        }
+
+        //The drawing board has a base size. This base size results in a certain ratio
+        //that the actual canvas has to be resized accordingly too. This is needed
+        //since not every client has the same screensize.
+        const baseWidth = {{.DrawingBoardBaseWidth }};
+        const baseHeight = {{.DrawingBoardBaseHeight }};
+        const boardRatio = baseWidth / baseHeight;
+
+        // Moving this here to extract the context after resizing
+        const context = drawingBoard.getContext("2d");
+
+        function scaleUpFactor() {
+            return baseWidth / drawingBoard.clientWidth;
+        }
+
+        //scalesUp the value using scaleUpFactor and reduces the precision.
+        //This makes sense since we absolutely don't need the precision and
+        //we'll reduce network traffic this way.
+        function scaelUpAndPrepareFloatForServer(value) {
+            //We reduce the precision in multiple steps, since we get a string
+            //as an intermediate result. The reason we don't want a string, is
+            //that unmarshalling on the backend won't work with strings for float
+            //values, unless explicitly specified, which however will cause it
+            //not to work without quotes. Example:
+            //  123.213476124918724 -> "123.21" -> 123.21
+            return parseFloat((scaleUpFactor() * value).toFixed(2));
+        }
+
+        function scaleDownFactor() {
+            return drawingBoard.clientWidth / baseWidth;
+        }
+
+        //This automatically scrolls down the chat on arrivals of new messages
+        new MutationObserver(() => messageContainer.scrollTop = messageContainer.scrollHeight)
+            .observe(messageContainer, {
+                attributes: false,
+                childList: true,
+                subtree: false
+            });
+
+        let ownerID, drawerID, drawerName;
+        let round = 0;
+        let rounds = 0;
+        let roundEndTime = 0;
+        let gameState = "unstarted";
+        let drawingTimeSetting = "∞";
+
+        function registerMessageHandler(targetSocket) {
+            targetSocket.onmessage = event => {
+                const parsed = JSON.parse(event.data);
+                if (parsed.type === "ready") {
+                    handleReadyEvent(parsed.data);
+                } else if (parsed.type === "game-over") {
+                    let ready = parsed.data;
+                    showRoundEndMessage(ready.previousWord);
+                    handleReadyEvent(ready);
+                } else if (parsed.type === "update-players") {
+                    applyPlayers(parsed.data);
+                } else if (parsed.type === "correct-guess") {
+                    playWav('{{.RootPath}}/resources/plop.wav');
+
+                    if (parsed.data === ownID) {
+                        appendMessage("correct-guess-message", null, '{{.Translation.Get "correct-guess"}}');
+                    } else {
+                        const player = getPlayer(parsed.data)
+                        if (player !== null) {
+                            appendMessage("correct-guess-message-other-player", null, '{{.Translation.Get "correct-guess-other-player"}}'.format(player.name));
+                        }
+                    }
+                } else if (parsed.type === "close-guess") {
+                    appendMessage("close-guess-message", null, '{{.Translation.Get "close-guess"}}'.format(parsed.data));
+                } else if (parsed.type === "update-wordhint") {
+                    // this event is (also) sent if the drawer has choosen a word, so we can hide the waitChooseDialog
+                    waitChooseDialog.style.visibility = "hidden";
+                    applyWordHints(parsed.data);
+                } else if (parsed.type === "message") {
+                    appendMessage(null, parsed.data.author, parsed.data.content);
+                } else if (parsed.type === "system-message") {
+                    appendMessage("system-message", '{{.Translation.Get "system"}}', parsed.data);
+                } else if (parsed.type === "non-guessing-player-message") {
+                    appendMessage("non-guessing-player-message", parsed.data.author, parsed.data.content);
+                } else if (parsed.type === "line") {
+                    drawLine(context, parsed.data.fromX * scaleDownFactor(), parsed.data.fromY * scaleDownFactor(), parsed.data.toX * scaleDownFactor(), parsed.data.toY * scaleDownFactor(), parsed.data.color, parsed.data.lineWidth * scaleDownFactor());
+                } else if (parsed.type === "fill") {
+                    context.fillFlood(parsed.data.x * scaleDownFactor(), parsed.data.y * scaleDownFactor(), parsed.data.color);
+                } else if (parsed.type === "clear-drawing-board") {
+                    clear(context);
+                } else if (parsed.type === "next-turn") {
+                    setRoundEndTime(parsed.data.roundEndTime);
+
+                    //As soon as a turn starts, the round should be ongoing, so we make
+                    //sure that all types of dialogs, that indicate the game isn't
+                    //ongoing, are not visible anymore.
+                    unstartedDialog.style.visibility = "hidden";
+                    gameOverDialog.style.visibility = "hidden";
+
+                    //If a player doesn't choose, the dialog will still be up.
+                    playWav('{{.RootPath}}/resources/end-turn.wav');
+
+                    clear(context);
+
+                    round = parsed.data.round;
+                    updateRoundsDisplay();
+                    applyPlayers(parsed.data.players);
+
+                    //Even though we always hide the dialog in the "your-turn"
+                    //event handling, it will be shortly visible if we it here.
+                    if (drawerID !== ownID) {
+                        //Show additional dialog, that another user (drawer) is choosing a word
+                        waitChooseDrawerSpan.innerText = drawerName;
+                        waitChooseDialog.style.visibility = "visible";
+                    }
+
+                    //We clear this, since there's no word chosen right now.
+                    wordContainer.innerHTML = "";
+
+                    allowDrawing = false;
+
+                    if (gameState === "ongoing") {
+                        //The previous turn has ended.
+                        showRoundEndMessage(parsed.data.previousWord);
+                    } else {
+                        //First turn, the game starts
+                        gameState = "ongoing";
+                    }
+                } else if (parsed.type === "drawing") {
+                    applyDrawData(parsed.data);
+                } else if (parsed.type === "kick") {
+                    if (parsed.data.playerId === ownID) {
+                        alert('{{.Translation.Get "self-kicked"}}');
+                        document.location.href = "{{.RootPath}}/";
+                    } else {
+                        let kickMessage = '{{.Translation.Get "player-kicked"}}'.format(parsed.data.playerName);
+                        appendMessage("system-message", '{{.Translation.Get "system"}}', kickMessage);
+                    }
+                } else if (parsed.type === "owner-change") {
+                    ownerID = parsed.data.playerId;
+                    appendMessage("system-message", '{{.Translation.Get "system"}}', '{{.Translation.Get "owner-change"}}'.format(parsed.data.playerName));
+                } else if (parsed.type === "drawer-kicked") {
+                    appendMessage("system-message", '{{.Translation.Get "system"}}', '{{.Translation.Get "drawer-kicked"}}');
+                } else if (parsed.type === "lobby-settings-changed") {
+                    rounds = parsed.data.rounds;
+                    updateRoundsDisplay();
+                    appendMessage("system-message", '{{.Translation.Get "system"}}', '{{.Translation.Get "lobby-settings-changed"}}\n\n'
+                        + '{{.Translation.Get "drawing-time-setting"}}: ' + parsed.data.drawingTime + "\n"
+                        + '{{.Translation.Get "rounds-setting"}}: ' + parsed.data.rounds + "\n"
+                        + '{{.Translation.Get "public-lobby-setting"}}: ' + parsed.data.public + "\n"
+                        + '{{.Translation.Get "max-players-setting"}}: ' + parsed.data.maxPlayers + "\n"
+                        + '{{.Translation.Get "custom-words-chance-setting"}}: ' + parsed.data.customWordsChance + "%\n")
+                } else if (parsed.type === "shutdown") {
+                    socket.onclose = null;
+                    socket.close();
+                    showDialog("shutdown-info", "Server shutting down",
+                        document.createTextNode("Sorry, but the server is about to shut down. Please come back at a later time."));
+                }
+            }
+        };
+
+        function showRoundEndMessage(previousWord) {
+            if (previousWord === "") {
+                appendMessage("system-message", null, '{{.Translation.Get "round-over"}}');
+            } else {
+                appendMessage("system-message", null, '{{.Translation.Get "round-over-no-word"}}'.format(previousWord));
+            }
+        }
+
+        function getPlayer(playerID) {
+            for (let i = 0; i < cachedPlayers.length; i++) {
+                let player = cachedPlayers[i];
+                if (player.id === playerID) {
+                    return player;
+                }
+            }
+
+            return null;
+        }
+
+        //In the initial implementation we used a timestamp to know when
+        //the round will end. The problem with that approach was that the
+        //clock on client and server was often not in sync. The second
+        //approach was to instead send milliseconds left and keep counting
+        //them down each 500 milliseconds. The problem with this approach, was
+        //that there could potentially be timing mistakes while counting down.
+        //What we do instead is use our local date, add the timeLeft to it and
+        //repeatdly recaculate the timeLeft using the roundEndTime and the
+        //current time. This way we won't have any calculation errors.
+        //
+        //FIXME The only leftover issue is that ping isn't taken into
+        //account, however, that's no biggie for now.
+        function setRoundEndTime(timeLeftMs) {
+            roundEndTime = Date.now() + timeLeftMs;
+        }
+
+        function handleReadyEvent(ready) {
+            setRoundEndTime(ready.roundEndTime);
+            ownerID = ready.ownerId;
+            allowDrawing = ready.allowDrawing;
+            ownID = ready.playerId;
+            round = ready.round;
+            rounds = ready.rounds;
+            gameState = ready.gameState;
+            drawingTimeSetting = ready.drawingTimeSetting;
+            updateRoundsDisplay();
+
+            if (ready.players && ready.players.length) {
+                applyPlayers(ready.players);
+            }
+            if (ready.currentDrawing && ready.currentDrawing.length) {
+                applyDrawData(ready.currentDrawing);
+            }
+            if (ready.wordHints && ready.wordHints.length) {
+                applyWordHints(ready.wordHints);
+            }
+
+            if (ready.gameState === "unstarted") {
+                unstartedDialog.style.visibility = "visible";
+            } else if (ready.gameState === "gameOver") {
+                gameOverDialog.style.visibility = "visible";
+                gameOverScoreboard.innerHTML = "";
+
+                //Copying array so we can sort.
+                const players = cachedPlayers.slice();
+                players.sort((a, b) => {
+                    return a.rank - b.rank;
+                });
+
+                //These two are required for displaying the "game over / win / tie" message.
+                let countOfRankOnePlayers = 0;
+                let isSelfRankOne = false;
+                for (let i = 0; i < players.length; i++) {
+                    const player = players[i];
+                    if (!player.connected) {
+                        continue;
+                    }
+
+                    if (player.rank === 1) {
+                        countOfRankOnePlayers++;
+                        if (player.id === ownID) {
+                            isSelfRankOne = true;
+                        }
+                    }
+
+                    //Even if we don't want to show a player-entry, we still need to iterate
+                    //over all players to handle the dialog titles.
+                    if (player.rank <= 5) {
+                        const newScoreboardEntry = document.createElement("div");
+                        newScoreboardEntry.classList.add("gameover-scoreboard-entry");
+                        if (player.id === ownID) {
+                            newScoreboardEntry.classList.add("gameover-scoreboard-entry-self");
+                        }
+
+                        const scoreboardRankDiv = document.createElement("div");
+                        scoreboardRankDiv.classList.add("gameover-scoreboard-rank");
+                        scoreboardRankDiv.innerText = player.rank;
+                        newScoreboardEntry.appendChild(scoreboardRankDiv);
+
+                        const scoreboardNameDiv = document.createElement("div");
+                        scoreboardNameDiv.classList.add("gameover-scoreboard-name");
+                        scoreboardNameDiv.innerText = player.name;
+                        newScoreboardEntry.appendChild(scoreboardNameDiv);
+
+                        const scoreboardScoreSpan = document.createElement("span");
+                        scoreboardScoreSpan.classList.add("gameover-scoreboard-score");
+                        scoreboardScoreSpan.innerText = player.score;
+                        newScoreboardEntry.appendChild(scoreboardScoreSpan);
+
+                        gameOverScoreboard.appendChild(newScoreboardEntry);
+                    }
+                }
+
+                if (isSelfRankOne) {
+                    if (countOfRankOnePlayers >= 2) {
+                        gameOverDialogTitle.innerText = '{{.Translation.Get "game-over-tie"}}';
+                    } else {
+                        gameOverDialogTitle.innerText = '{{.Translation.Get "game-over-win"}}';
+                    }
+                } else {
+                    gameOverDialogTitle.innerText = '{{.Translation.Get "game-over"}}'.format(player.rank, player.score);
+                }
+            } else if (ready.gameState === "ongoing") {
+                // Lack of wordHints implies that word has been chosen yet.
+                if (ready.wordHints === null) {
+                    waitChooseDrawerSpan.innerText = drawerName;
+                    waitChooseDialog.style.visibility = "visible";
+                }
+            }
+        }
+
+        function playWav(file) {
+            if (sound) {
+                const audio = new Audio(file);
+                audio.type = 'audio/wav';
+                audio.play();
+            }
+        }
+
+        window.setInterval(() => {
+            if (gameState === "ongoing") {
+                const msLeft = roundEndTime - Date.now();
+                const secondsLeft = Math.max(0, Math.floor(msLeft / 1000));
+                timeLeftValue.innerText = "" + secondsLeft
+            } else {
+                timeLeftValue.innerText = "" + drawingTimeSetting;
+            }
+        }, 500);
+
+        //appendMessage adds a new message to the message container. If the
+        //message amount is too high, we cut off a part of the messages to
+        //prevent lagging and useless memory usage.
+        function appendMessage(styleClass, author, message) {
+            if (messageContainer.childElementCount >= 100) {
+                messageContainer.removeChild(messageContainer.firstChild);
+            }
+
+            const newMessageDiv = document.createElement("div");
+            newMessageDiv.classList.add("message");
+            if (styleClass !== null && styleClass !== "") {
+                newMessageDiv.classList.add(styleClass);
+            }
+
+            if (author !== null && author !== "") {
+                const authorNameSpan = document.createElement("span");
+                authorNameSpan.classList.add("chat-name");
+                authorNameSpan.innerText = author;
+                newMessageDiv.appendChild(authorNameSpan);
+            }
+
+            const messageSpan = document.createElement("span");
+            messageSpan.classList.add("message-content");
+            messageSpan.innerText = message;
+            newMessageDiv.appendChild(messageSpan);
+
+            messageContainer.appendChild(newMessageDiv);
+        }
+
+        let cachedPlayers;
+
+        //applyPlayers takes the players passed, assigns them to cachedPlayers,
+        //refreshes the scoreboard and updates the drawerID and drawerName variables.
+        function applyPlayers(players) {
+            playerContainer.innerHTML = "";
+            cachedPlayers = players;
+            players.forEach(player => {
+                //We don't wanna show the disconnected players.
+                if (!player.connected) {
+                    return;
+                }
+
+                const playerDiv = document.createElement("div");
+
+                playerDiv.classList.add("player");
+                if (player.state === "standby") {
+                    playerDiv.classList.add("player-done");
+                }
+
+                const rankSpan = document.createElement("span");
+                rankSpan.classList.add("rank");
+                rankSpan.innerText = player.rank;
+                playerDiv.appendChild(rankSpan)
+
+                const playernameSpan = document.createElement("span");
+                playernameSpan.classList.add("playername");
+                playernameSpan.innerText = player.name;
+                playernameSpan.id = "playername-" + player.id;
+                if (player.id === ownID) {
+                    playernameSpan.classList.add("playername-self");
+                }
+                playerDiv.appendChild(playernameSpan);
+
+                const scoreAndStatusDiv = document.createElement("div");
+                scoreAndStatusDiv.classList.add("score-and-status");
+                playerDiv.appendChild(scoreAndStatusDiv);
+
+                const playerscoreDiv = document.createElement("div");
+                playerscoreDiv.classList.add("playerscore-group");
+                scoreAndStatusDiv.appendChild(playerscoreDiv);
+
+                const playerscoreSpan = document.createElement("span");
+                playerscoreSpan.classList.add("playerscore");
+                playerscoreSpan.innerText = player.score;
+                playerscoreDiv.appendChild(playerscoreSpan);
+
+                const lastPlayerscoreSpan = document.createElement("span");
+                lastPlayerscoreSpan.classList.add("last-turn-score");
+                lastPlayerscoreSpan.innerText = '{{.Translation.Get "last-turn"}}'.format(player.lastScore);
+                playerscoreDiv.appendChild(lastPlayerscoreSpan);
+
+
+                if (player.state === "drawing") {
+                    drawerID = player.id;
+                    drawerName = player.name;
+
+                    const playerStateImage = createPlayerStateImageNode("{{.RootPath}}/resources/pencil.svg");
+                    playerStateImage.style.transform = "scaleX(-1)";
+                    scoreAndStatusDiv.appendChild(playerStateImage);
+                } else if (player.state === "standby") {
+                    const playerStateImage = createPlayerStateImageNode("{{.RootPath}}/resources/checkmark.svg");
+                    scoreAndStatusDiv.appendChild(playerStateImage);
+                }
+
+                playerContainer.appendChild(playerDiv);
+            });
+        }
+
+        function createPlayerStateImageNode(path) {
+            const playerStateImage = document.createElement("img");
+            playerStateImage.style.width = "1rem";
+            playerStateImage.style.height = "1rem";
+            playerStateImage.src = path;
+            return playerStateImage;
+        }
+        function updateRoundsDisplay() {
+            roundSpan.innerText = round;
+            maxRoundSpan.innerText = rounds;
+        }
+
+        function applyWordHints(wordHints) {
+            wordContainer.innerHTML = "";
+            wordHints.forEach(hint => {
+                const hintSpan = document.createElement("span");
+                hintSpan.classList.add("guess-letter");
+                if (hint.character === 0) {
+                    hintSpan.classList.add("guess-letter-underline");
+                    hintSpan.innerHTML = "&nbsp;";
+                } else {
+                    if (hint.underline) {
+                        hintSpan.classList.add("guess-letter-underline");
+                    }
+                    hintSpan.innerText = String.fromCharCode(hint.character);
+                }
+
+                wordContainer.appendChild(hintSpan);
+            });
+        }
+
+        function applyDrawData(drawElements) {
+            clear(context);
+            drawElements
+                .forEach(drawElement => {
+                    const drawData = drawElement.data;
+                    if (drawElement.type === "fill") {
+                        context.fillFlood(drawData.x * scaleDownFactor(), drawData.y * scaleDownFactor(), drawData.color);
+                    } else if (drawElement.type === "line") {
+                        drawLine(context, drawData.fromX * scaleDownFactor(),
+                            drawData.fromY * scaleDownFactor(), drawData.toX * scaleDownFactor(),
+                            drawData.toY * scaleDownFactor(), drawData.color, drawData.lineWidth * scaleDownFactor());
+                    } else {
+                        console.log("Unknown draw element type: " + drawData.type);
+                    }
+                });
+        }
+
+        function handleCanvasResize() {
+            if (drawingBoard.width === drawingBoard.clientWidth && drawingBoard.height === drawingBoard.clientHeight) {
+                return false;
+            }
+
+            drawingBoard.width = drawingBoard.clientWidth;
+            drawingBoard.height = drawingBoard.clientHeight;
+
+            //Ugly workaround to fix https://github.com/scribble-rs/scribble.rs/issues/256
+            //Sadly I don't know how to do this with CSS.
+            //I've had the same workaround a while ago, but deleted it thinking it
+            //wasn't needed anymore, however, without this, the chat container will expand
+            //it's own parent, causing overflow-y to not take effect, since the parent has
+            //no height constraint.
+            //This workaround doesn't affect the portrait view.
+            chat.style.maxHeight = drawingBoard.clientHeight + "px";
+
+            return true;
+        }
+
+        //Call intially to correct initial state
+        handleCanvasResize();
+
+        window.addEventListener("resize", () => {
+            if (handleCanvasResize()) {
+                //Since the canvas gets cleared, we request the drawing again.
+                //Saving it locally would be wasteful and might slow down some
+                //clients due to a lot of memory allocation.
+                socket.send(JSON.stringify({
+                    type: "request-drawing",
+                }));
+            }
+        }, false);
+
+
+        function clear(context) {
+            context.fillStyle = "#FFFFFF";
+            context.fillRect(0, 0, drawingBoard.width, drawingBoard.height);
+        }
+
+        function drawLine(context, x1, y1, x2, y2, color, lineWidth) {
+            // the coordinates must be whole numbers to improve performance.
+            // also, decimals as coordinates is not making sense.
+            x1 = Math.floor(x1);
+            y1 = Math.floor(y1);
+            x2 = Math.floor(x2);
+            y2 = Math.floor(y2);
+            lineWidth = Math.ceil(lineWidth);
+
+            // calculate bounding box
+            const left = Math.max(0, Math.min(context.canvas.width, Math.min(x1, x2) - lineWidth));
+            const top = Math.max(0, Math.min(context.canvas.height, Math.min(y1, y2) - lineWidth));
+            const right = Math.max(0, Math.min(context.canvas.width, Math.max(x1, x2) + lineWidth));
+            const bottom = Math.max(0, Math.min(context.canvas.height, Math.max(y1, y2) + lineWidth));
+
+            // off canvas, so don't draw anything
+            if (right - left === 0 || bottom - top === 0) {
+                return;
+            }
+
+            const circleMap = generateCircleMap(Math.floor(lineWidth / 2));
+            const offset = Math.floor(circleMap.length / 2);
+            const imageData = context.getImageData(left, top, right - left, bottom - top);
+
+            for (let ix = 0; ix < circleMap.length; ix++) {
+                for (let iy = 0; iy < circleMap[ix].length; iy++) {
+                    if (circleMap[ix][iy] === 1 || (x1 === x2 && y1 === y2 && circleMap[ix][iy] === 2)) {
+                        const newX1 = x1 + ix - offset - left;
+                        const newY1 = y1 + iy - offset - top;
+                        const newX2 = x2 + ix - offset - left;
+                        const newY2 = y2 + iy - offset - top;
+                        drawBresenhamLine(imageData, newX1, newY1, newX2, newY2, color);
+                    }
+                }
+            }
+            context.putImageData(imageData, left, top);
+        }
+
+        function drawBresenhamLine(imageData, x1, y1, x2, y2, color) {
+            const dx = Math.abs(x2 - x1);
+            const dy = Math.abs(y2 - y1);
+            const sx = (x1 < x2) ? 1 : -1;
+            const sy = (y1 < y2) ? 1 : -1;
+            let err = dx - dy;
+
+            while (true) {
+                //check if pixel is inside the canvas
+                if (!(x1 < 0 || x1 >= imageData.width || y1 < 0 || y1 >= imageData.height)) {
+                    setPixel(imageData, x1, y1, color);
+                }
+
+                if ((x1 === x2) && (y1 === y2)) break;
+                const e2 = 2 * err;
+                if (e2 > -dy) {
+                    err -= dy;
+                    x1 += sx;
+                }
+                if (e2 < dx) {
+                    err += dx;
+                    y1 += sy;
+                }
+            }
+        }
+
+        function generateCircleMap(radius) {
+            const diameter = 2 * radius;
+            const circleData = new Array(diameter);
+
+            for (let x = 0; x < diameter; x++) {
+                circleData[x] = new Array(diameter);
+                for (let y = 0; y < diameter; y++) {
+                    const distanceToRadius = Math.sqrt(Math.pow(radius - x, 2) + Math.pow(radius - y, 2));
+                    if (distanceToRadius > radius) {
+                        circleData[x][y] = 0;
+                    } else if (distanceToRadius < radius - 2) {
+                        circleData[x][y] = 2;
+                    } else {
+                        circleData[x][y] = 1;
+                    }
+                }
+            }
+
+            return circleData;
+        }
+
+        function setPixel(imageData, x, y, color) {
+            const offset = (y * imageData.width + x) * 4;
+            imageData.data[offset] = color.r;
+            imageData.data[offset + 1] = color.g;
+            imageData.data[offset + 2] = color.b;
+            //We never want transparency, therefore alpha is always 255.
+            imageData.data[offset + 3] = 255;
+        }
+    </script>
+</body>
+
+</html>
+{{end}}

@@ -59,9 +59,13 @@ func SetupRoutes(a auth.Service, t twitch.Client) {
 			http.FileServer(http.FS(frontendResourcesFS))))
 
 	http.HandleFunc(api.RootPath+"/", homePage)
+
 	http.HandleFunc(api.RootPath+"/ssrLogin", authHandler.ssrLogin)
 	http.HandleFunc(api.RootPath+"/ssrLogout", authHandler.ssrLogout)
 	http.HandleFunc(api.RootPath+"/ssrTwitchCallback", authHandler.ssrTwitchCallback)
+
+	http.HandleFunc(api.RootPath+"/ssrObserveLobby", ssrObserveLobby)
+
 	http.HandleFunc(api.RootPath+"/ssrEnterLobby", requireUserOrRedirect(a, ssrEnterLobby))
 	http.HandleFunc(api.RootPath+"/ssrCreateLobby", requireUserOrRedirect(a, ssrCreateLobby))
 }
