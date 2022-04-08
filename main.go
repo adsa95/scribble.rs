@@ -78,30 +78,17 @@ func main() {
 	//Setting the seed in order for the petnames to be random.
 	rand.Seed(time.Now().UnixNano())
 
-	jwtKey, jwtKeySet := os.LookupEnv("JWT_KEY")
-	jwtCookieName, jwtCookieNameSet := os.LookupEnv("JWT_COOKIE_NAME")
-	twitchClientId, twitchClientIdSet := os.LookupEnv("TWITCH_CLIENT_ID")
-	twitchClientSecret, twitchClientSecretSet := os.LookupEnv("TWITCH_CLIENT_SECRET")
-
-	if !jwtKeySet {
-		log.Fatalln("JWT_KEY not set")
-	} else if !twitchClientIdSet {
-		log.Fatalln("TWITCH_CLIENT_ID not set")
-	} else if !twitchClientSecretSet {
-		log.Fatalln("TWITCH_CLIENT_SECRET not set")
-	} else if !jwtCookieNameSet {
-		jwtCookieName = "usertoken"
-	}
+	config := ConfigFromEnv()
 
 	authService := auth.Service{
-		JwtKey:        []byte(jwtKey),
-		JwtCookieName: jwtCookieName,
+		JwtKey:        []byte(config.JwtKey),
+		JwtCookieName: config.JwtCookieName,
 	}
 
 	twitchClient := twitch.Client{
-		ClientId:     twitchClientId,
-		ClientSecret: twitchClientSecret,
-		RedirectURI:  "http://localhost:8080/ssrTwitchCallback",
+		ClientId:     config.TwitchClientId,
+		ClientSecret: config.TwitchClientSecret,
+		RedirectURI:  config.TwitchRedirectURI,
 	}
 
 	api.SetupRoutes(authService)
