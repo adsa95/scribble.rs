@@ -60,6 +60,11 @@ func (a Service) generateToken(user *User) (string, error) {
 	return token.SignedString(a.JwtKey)
 }
 
+func (a Service) IsAuthenticated(r *http.Request) bool {
+	user, _ := a.GetUser(r)
+	return user != nil
+}
+
 func (a Service) GetUser(r *http.Request) (*User, error) {
 	userCookie, cookieError := r.Cookie(a.JwtCookieName)
 	if cookieError != nil {

@@ -14,6 +14,10 @@ type AuthHandler struct {
 }
 
 func (h AuthHandler) ssrLogin(w http.ResponseWriter, r *http.Request) {
+	if h.authService.IsAuthenticated(r) {
+		h.authService.RemoveUserCookie(w)
+	}
+
 	var intended *string = nil
 	if r.URL.Query().Has("intended") {
 		s := r.URL.Query().Get("intended")
