@@ -139,5 +139,5 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	//We only add the lobby if we could do all necessary pre-steps successfully.
 	state.AddLobby(lobby)
 
-	http.Redirect(w, r, currentBasePageConfig.RootPath+"/ssrEnterLobby?lobby_id="+lobby.LobbyID, http.StatusFound)
+	http.Redirect(w, r, currentBasePageConfig.RootPath+"/lobby?lobby_id="+lobby.LobbyID, http.StatusFound)
 }

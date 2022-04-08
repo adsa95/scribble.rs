@@ -60,14 +60,14 @@ func SetupRoutes(a auth.Service, t twitch.Client) {
 
 	http.HandleFunc(api.RootPath+"/", homePage)
 
-	http.HandleFunc(api.RootPath+"/ssrLogin", authHandler.ssrLogin)
-	http.HandleFunc(api.RootPath+"/ssrLogout", authHandler.ssrLogout)
-	http.HandleFunc(api.RootPath+"/ssrTwitchCallback", authHandler.ssrTwitchCallback)
+	http.HandleFunc(api.RootPath+"/login", authHandler.ssrLogin)
+	http.HandleFunc(api.RootPath+"/logout", authHandler.ssrLogout)
+	http.HandleFunc(api.RootPath+"/login_twitch_callback", authHandler.ssrTwitchCallback)
 
-	http.HandleFunc(api.RootPath+"/ssrObserveLobby", ssrObserveLobby)
+	http.HandleFunc(api.RootPath+"/lobby", requireUserOrRedirect(a, ssrEnterLobby))
+	http.HandleFunc(api.RootPath+"/create-lobby", requireUserOrRedirect(a, ssrCreateLobby))
 
-	http.HandleFunc(api.RootPath+"/ssrEnterLobby", requireUserOrRedirect(a, ssrEnterLobby))
-	http.HandleFunc(api.RootPath+"/ssrCreateLobby", requireUserOrRedirect(a, ssrCreateLobby))
+	http.HandleFunc(api.RootPath+"/lobby/observe", ssrObserveLobby)
 }
 
 // errorPageData represents the data that error.html requires to be displayed.
@@ -100,5 +100,5 @@ func loginPageRedirect(w http.ResponseWriter, r *http.Request, e error) {
 	params := url.Values{}
 	params.Add("intended", strings.TrimPrefix(r.URL.String(), api.RootPath))
 
-	http.Redirect(w, r, api.RootPath+"/ssrLogin?"+params.Encode(), http.StatusFound)
+	http.Redirect(w, r, api.RootPath+"/login?"+params.Encode(), http.StatusFound)
 }

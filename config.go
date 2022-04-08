@@ -32,7 +32,7 @@ func ConfigFromEnv() Config {
 		jwtCookieName = "usertoken"
 	}
 	if !twitchRedirectURISet {
-		twitchRedirectURI = "http://localhost:8080"
+		twitchRedirectURI = "http://localhost:8080/login_twitch_callback"
 	}
 
 	return Config{
