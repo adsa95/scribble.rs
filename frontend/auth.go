@@ -5,12 +5,20 @@ import (
 	"github.com/scribble-rs/scribble.rs/auth"
 	"github.com/scribble-rs/scribble.rs/translations"
 	"github.com/scribble-rs/scribble.rs/twitch"
+	"log"
 	"net/http"
 )
 
 type AuthHandler struct {
 	authService  auth.Service
 	twitchClient twitch.Client
+}
+
+type loginPageData struct {
+	BasePageConfig
+	Translation    translations.Translation
+	Locale         string
+	TwitchLoginURI string
 }
 
 func (h AuthHandler) ssrLogin(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +33,19 @@ func (h AuthHandler) ssrLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var authURI = h.twitchClient.GetAuthURI(intended, nil)
-	http.Redirect(w, r, authURI, http.StatusFound)
+
+	translation, locale := determineTranslation(r)
+	templateError := pageTemplates.ExecuteTemplate(w, "login-page", &loginPageData{
+		BasePageConfig: BasePageConfig{
+			RootPath: api.RootPath,
+		},
+		Translation:    translation,
+		Locale:         locale,
+		TwitchLoginURI: authURI,
+	})
+	if templateError != nil {
+		log.Println(templateError.Error())
+	}
 }
 
 type logoutPageData struct {

@@ -3,6 +3,10 @@ package translations
 func initEnglishTranslation() Translation {
 	translation := createTranslation()
 
+	translation.put("login-required", "Login required")
+	translation.put("login-required-hint", "In order to prevent abuse, you must login using Twitch to play the game.")
+	translation.put("login-with-twitch", "Login with Twitch")
+
 	translation.put("requires-js", "This website requires JavaScript to run properly.")
 
 	translation.put("start-the-game", "Start the game")

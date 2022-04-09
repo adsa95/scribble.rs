@@ -1,0 +1,52 @@
+.login-pane-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 .5rem;
+}
+
+.login-pane {
+    margin-left: auto;
+    margin-right: auto;
+    background-color: white;
+    padding: 1rem;
+    border-radius: 1rem;
+    display: flex;
+    flex-direction: column;
+    max-width: 600px;
+}
+
+.login-title {
+    display: block;
+    font-size: 3.5rem;
+}
+
+.login-hint {
+    margin-top: 16px;
+    margin-bottom: 0;
+    font-size: 1rem;
+}
+
+.twitch-login-button, .twitch-login-button:link, .twitch-login-button:visited {
+    align-self: center;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 16px;
+    background-color: rgb(145, 71, 255);
+    padding: 10px;
+    border-radius: 3px;
+    color: white !important;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.twitch-login-button img {
+    height: 20px;
+    margin-right: 8px;
+}
+
+.twitch-login-button:hover {
+    text-decoration: none;
+    background-color: rgb(119, 44, 232);
+}
