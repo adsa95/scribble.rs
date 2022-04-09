@@ -397,9 +397,12 @@ func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 		},
 	}
 
-	//We send the kick event to all players, since it was a valid vote.
+	//We send the kick event to all players
 	for _, otherPlayer := range lobby.players {
 		lobby.WriteJSON(otherPlayer.SocketConnection, kickEvent)
+	}
+	for _, observer := range lobby.observers {
+		lobby.WriteJSON(observer.SocketConnection, kickEvent)
 	}
 
 	kickPlayer(lobby, playerToKick, playerToKickIndex)
