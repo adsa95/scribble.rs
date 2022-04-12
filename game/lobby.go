@@ -435,6 +435,8 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 		}
 	}
 
+	lobby.KickedUsers = append(lobby.KickedUsers, *playerToKick.user)
+
 	if lobby.drawer == playerToKick {
 		newDrawer, roundOver := determineNextDrawer(lobby)
 		lobby.players = append(lobby.players[:playerToKickIndex], lobby.players[playerToKickIndex+1:]...)

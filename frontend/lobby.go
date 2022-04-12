@@ -98,6 +98,11 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 				return
 			}
 
+			if lobby.HasBeenKicked(&u) {
+				userFacingError(w, "You've been kicked from this lobby")
+				return
+			}
+
 			lobby.JoinPlayer(&u)
 		} else {
 			if player.Connected && player.GetWebsocket() != nil {

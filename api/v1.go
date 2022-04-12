@@ -136,6 +136,11 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) 
 				return
 			}
 
+			if lobby.HasBeenKicked(&user) {
+				http.Error(w, "you've been kicked from this lobby", http.StatusUnauthorized)
+				return
+			}
+
 			lobby.JoinPlayer(&user)
 		}
 

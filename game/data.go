@@ -90,6 +90,8 @@ type Lobby struct {
 	//it is empty.
 	LastPlayerDisconnectTime *time.Time
 
+	KickedUsers []auth.User
+
 	mutex *sync.Mutex
 
 	WriteJSON func(player *SocketConnection, object interface{}) error
@@ -397,4 +399,14 @@ func (lobby *Lobby) Synchronized(logic func()) {
 	defer lobby.mutex.Unlock()
 
 	logic()
+}
+
+func (lobby Lobby) HasBeenKicked(user *auth.User) bool {
+	for _, u := range lobby.KickedUsers {
+		if user.Id == u.Id {
+			return true
+		}
+	}
+
+	return false
 }
