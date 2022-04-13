@@ -2,6 +2,7 @@ module github.com/scribble-rs/scribble.rs
 
 go 1.18
 
+// +heroku goVersion go1.18
 require (
 	github.com/Bios-Marcel/discordemojimap/v2 v2.0.3
 	github.com/agnivade/levenshtein v1.1.1
