@@ -58,7 +58,7 @@ func SetupRoutes(a auth.Service, t twitch.Client) {
 		http.StripPrefix(api.RootPath,
 			http.FileServer(http.FS(frontendResourcesFS))))
 
-	http.HandleFunc(api.RootPath+"/", homePage)
+	http.HandleFunc(api.RootPath+"/", requireUserOrRedirect(a, homePage))
 
 	http.HandleFunc(api.RootPath+"/login", authHandler.ssrLogin)
 	http.HandleFunc(api.RootPath+"/logout", authHandler.ssrLogout)

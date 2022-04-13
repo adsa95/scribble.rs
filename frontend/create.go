@@ -15,7 +15,7 @@ import (
 
 // homePage servers the default page for scribble.rs, which is the page to
 // create a new lobby.
-func homePage(w http.ResponseWriter, r *http.Request) {
+func homePage(w http.ResponseWriter, r *http.Request, u auth.User) {
 	translation, locale := determineTranslation(r)
 	createPageData := createDefaultLobbyCreatePageData()
 	createPageData.Translation = translation
@@ -138,6 +138,8 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 
 	//We only add the lobby if we could do all necessary pre-steps successfully.
 	state.AddLobby(lobby)
+
+	log.Printf("%v (%v) created lobby %v", u.TwitchName, u.Id, lobby.LobbyID)
 
 	http.Redirect(w, r, currentBasePageConfig.RootPath+"/lobby?lobby_id="+lobby.LobbyID, http.StatusFound)
 }
