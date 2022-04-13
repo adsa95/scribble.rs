@@ -87,6 +87,8 @@ func (h AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Successfully logged in user %v (%v)", user.TwitchName, user.Id)
+
 	redirectPath := "/"
 	if r.URL.Query().Has("state") {
 		redirectPath = api.RootPath + r.URL.Query().Get("state")
