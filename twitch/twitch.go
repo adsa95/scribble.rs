@@ -8,19 +8,28 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
-type Tokens struct {
-	AccessToken  string
-	RefreshToken string
-	Scopes       []string
+type TokenSet struct {
+	AccessToken          string
+	RefreshToken         string
+	FetchedAt            time.Time
+	AccessTokenExpiresAt time.Time
+	Scopes               []string
 }
 
 type User struct {
 	Id              string `json:"id"`
 	Login           string `json:"login"`
 	DisplayName     string `json:"display_name"`
+	Type            string `json:"type"`
+	BroadcasterType string `json:"broadcaster_type"`
+	Description     string `json:"description"`
 	ProfileImageUrl string `json:"profile_image_url"`
+	OfflineImageUrl string `json:"offline_image_url"`
+	ViewCount       int    `json:"view_count"`
+	CreatedAt       string `json:"created_at"`
 }
 
 type GetUsersResult struct {
@@ -40,7 +49,7 @@ func (c Client) GetAuthURI(state *string, scopes *[]string) string {
 	params.Add("response_type", "code")
 
 	if scopes != nil && len(*scopes) > 0 {
-		params.Add("scopes", strings.Join(*scopes, ","))
+		params.Add("scope", strings.Join(*scopes, ","))
 	}
 
 	if state != nil {
@@ -50,31 +59,31 @@ func (c Client) GetAuthURI(state *string, scopes *[]string) string {
 	return "https://id.twitch.tv/oauth2/authorize?" + params.Encode()
 }
 
-func (c Client) GetUserFromCode(code string) (*User, error) {
-	token, tokenError := c.getAccessTokenFromCode(code)
+func (c Client) GetUserFromCode(code string) (*User, *TokenSet, error) {
+	tokens, tokenError := c.getTokenSetFromCode(code)
 	if tokenError != nil {
-		return nil, tokenError
+		return nil, nil, tokenError
 	}
 
-	userResult, getUsersError := c.GetUsers(token, url.Values{})
+	userResult, getUsersError := c.GetUsers(tokens, url.Values{})
 	if getUsersError != nil {
-		return nil, getUsersError
+		return nil, nil, getUsersError
 	}
 
 	if len(userResult.Data) != 1 {
-		return nil, fmt.Errorf("more or less than one user recieved, should be exactly one")
+		return nil, nil, fmt.Errorf("more or less than one user recieved, should be exactly one")
 	}
 
-	return &userResult.Data[0], nil
+	return &userResult.Data[0], tokens, nil
 }
 
-func (c Client) GetUsers(accessToken string, query url.Values) (*GetUsersResult, error) {
+func (c Client) GetUsers(tokens *TokenSet, query url.Values) (*GetUsersResult, error) {
 	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/users?"+query.Encode(), bytes.NewBuffer(make([]byte, 0)))
 	if newRequestError != nil {
 		return nil, newRequestError
 	}
 
-	request.Header.Set("Authorization", "Bearer "+accessToken)
+	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 
 	var result GetUsersResult
 	err := c.doAndParseJson(request, &result)
@@ -85,31 +94,173 @@ func (c Client) GetUsers(accessToken string, query url.Values) (*GetUsersResult,
 	return &result, nil
 }
 
-func (c Client) getAccessTokenFromCode(code string) (string, error) {
-	params := map[string]string{
-		"client_id":     c.ClientId,
-		"client_secret": c.ClientSecret,
-		"code":          code,
-		"grant_type":    "authorization_code",
-		"redirect_uri":  c.RedirectURI,
+type BannedUserEntry struct {
+	UserId         string `json:"user_id"`
+	UserLogin      string `json:"user_login"`
+	UserName       string `json:"user_name"`
+	ExpiresAt      string `json:"expires_at"`
+	Reason         string `json:"reason"`
+	ModeratorId    string `json:"moderator_id"`
+	ModeratorLogin string `json:"moderator_login"`
+	ModeratorName  string `json:"moderator_name"`
+}
+
+type GetBannedUsersResult struct {
+	Data       []BannedUserEntry `json:"data"`
+	Pagination struct {
+		Cursor string `json:"cursor"`
+	} `json:"pagination"`
+}
+
+func (c Client) GetAllBannedUsers(tokens *TokenSet, broadcasterId string) ([]BannedUserEntry, error) {
+	res := make([]BannedUserEntry, 0)
+	cursor := ""
+
+	for true {
+		r, err := c.GetBannedUsers(tokens, broadcasterId, cursor)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, r.Data...)
+
+		if r.Pagination.Cursor != "" {
+			cursor = r.Pagination.Cursor
+		} else {
+			break
+		}
 	}
 
-	request, newRequestError := http.NewRequest("POST", "https://id.twitch.tv/oauth2/token"+toQueryString(params), bytes.NewBuffer([]byte("")))
+	return res, nil
+}
+
+func (c Client) GetBannedUsers(tokens *TokenSet, broadcasterId string, cursor string) (*GetBannedUsersResult, error) {
+	params := url.Values{}
+	params.Add("first", "100")
+	params.Add("broadcaster_id", broadcasterId)
+
+	if cursor != "" {
+		params.Add("cursor", cursor)
+	}
+
+	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/moderation/banned?"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
 	if newRequestError != nil {
-		return "", newRequestError
+		return nil, newRequestError
+	}
+
+	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	var result GetBannedUsersResult
+	err := c.doAndParseJson(request, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+type ModeratorEntry struct {
+	UserId    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
+}
+
+type GetModeratorsResult struct {
+	Data       []ModeratorEntry `json:"data"`
+	Pagination struct {
+		Cursor string `json:"cursor"`
+	} `json:"pagination"`
+}
+
+func (c Client) GetAllModerators(tokens *TokenSet, broadcasterId string) ([]ModeratorEntry, error) {
+	res := make([]ModeratorEntry, 0)
+	cursor := ""
+
+	for true {
+		r, err := c.GetModerators(tokens, broadcasterId, cursor)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, r.Data...)
+
+		if r.Pagination.Cursor != "" {
+			cursor = r.Pagination.Cursor
+		} else {
+			break
+		}
+	}
+
+	return res, nil
+}
+
+func (c Client) GetModerators(tokens *TokenSet, broadcasterId string, cursor string) (*GetModeratorsResult, error) {
+	params := url.Values{}
+	params.Add("broadcaster_id", broadcasterId)
+	params.Add("first", "1")
+
+	if cursor != "" {
+		params.Add("cursor", cursor)
+	}
+
+	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/moderation/moderators?"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
+	if newRequestError != nil {
+		return nil, newRequestError
+	}
+
+	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	var result GetModeratorsResult
+	err := c.doAndParseJson(request, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (c Client) getTokenSetFromCode(code string) (*TokenSet, error) {
+	params := url.Values{}
+	params.Set("client_id", c.ClientId)
+	params.Set("client_secret", c.ClientSecret)
+	params.Set("code", code)
+	params.Set("grant_type", "authorization_code")
+	params.Set("redirect_uri", c.RedirectURI)
+
+	request, newRequestError := http.NewRequest("POST", "https://id.twitch.tv/oauth2/token?"+params.Encode(), bytes.NewBuffer([]byte("")))
+	if newRequestError != nil {
+		return nil, newRequestError
 	}
 
 	var result struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
+		AccessToken  string   `json:"access_token"`
+		RefreshToken string   `json:"refresh_token"`
+		ExpiresIn    int64    `json:"expires_in"`
+		TokenType    string   `json:"token_type"`
+		Scope        []string `json:"scope"`
 	}
 
 	err := c.doAndParseJson(request, &result)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return result.AccessToken, nil
+	if result.TokenType != "bearer" {
+		return nil, fmt.Errorf("invalid token type: %s", result.TokenType)
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(time.Duration(result.ExpiresIn) * time.Second)
+
+	set := TokenSet{
+		AccessToken:          result.AccessToken,
+		RefreshToken:         result.RefreshToken,
+		FetchedAt:            now,
+		AccessTokenExpiresAt: expiresAt,
+		Scopes:               []string{},
+	}
+
+	return &set, nil
 }
 
 func (c Client) doAndParseJson(r *http.Request, result any) error {
@@ -123,13 +274,13 @@ func (c Client) doAndParseJson(r *http.Request, result any) error {
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode != 200 {
-		return fmt.Errorf("%v", response.Status)
-	}
-
 	bodyString, readError := io.ReadAll(response.Body)
 	if readError != nil {
 		return readError
+	}
+
+	if response.StatusCode != 200 {
+		return fmt.Errorf("%v", response.Status)
 	}
 
 	decodeError := json.Unmarshal(bodyString, result)
@@ -138,26 +289,4 @@ func (c Client) doAndParseJson(r *http.Request, result any) error {
 	}
 
 	return nil
-}
-
-func toQueryString(params map[string]string) string {
-	if len(params) == 0 {
-		return ""
-	}
-
-	var res = "?"
-	var first = true
-	for key, value := range params {
-		if !first {
-			res = res + "&"
-		}
-
-		res = res + key + "=" + value
-
-		if first {
-			first = false
-		}
-	}
-
-	return res
 }

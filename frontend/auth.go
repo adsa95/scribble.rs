@@ -70,7 +70,7 @@ func (h AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	twitchUser, verificationError := h.twitchClient.GetUserFromCode(r.URL.Query().Get("code"))
+	twitchUser, _, verificationError := h.twitchClient.GetUserFromCode(r.URL.Query().Get("code"))
 	if verificationError != nil {
 		userFacingError(w, "Could not get user from Twitch Auth Code")
 		return
