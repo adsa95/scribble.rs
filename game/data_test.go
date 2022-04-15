@@ -21,14 +21,14 @@ func TestOccupiedPlayerCount(t *testing.T) {
 	}
 
 	lobby.players = append(lobby.players, &Player{
-		Connected: true,
+		SocketConnection: &SocketConnection{Connected: true},
 	})
 	if lobby.GetOccupiedPlayerSlots() != 2 {
 		t.Errorf("Occupied player count expected to be 2, but was %d", lobby.GetOccupiedPlayerSlots())
 	}
 
 	disconnectedPlayer := &Player{
-		Connected: false,
+		SocketConnection: &SocketConnection{Connected: true},
 	}
 	lobby.players = append(lobby.players, disconnectedPlayer)
 	if lobby.GetOccupiedPlayerSlots() != 3 {

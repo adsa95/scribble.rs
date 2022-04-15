@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/scribble-rs/scribble.rs/auth"
 	"sync"
 	"testing"
 )
@@ -75,14 +76,14 @@ func Test_recalculateRanks(t *testing.T) {
 		mutex: &sync.Mutex{},
 	}
 	lobby.players = append(lobby.players, &Player{
-		ID:        "a",
-		Score:     1,
-		Connected: true,
+		ID:               "a",
+		Score:            1,
+		SocketConnection: &SocketConnection{Connected: true},
 	})
 	lobby.players = append(lobby.players, &Player{
-		ID:        "b",
-		Score:     1,
-		Connected: true,
+		ID:               "b",
+		Score:            1,
+		SocketConnection: &SocketConnection{Connected: true},
 	})
 	recalculateRanks(lobby)
 
@@ -94,9 +95,9 @@ func Test_recalculateRanks(t *testing.T) {
 	}
 
 	lobby.players = append(lobby.players, &Player{
-		ID:        "c",
-		Score:     0,
-		Connected: true,
+		ID:               "c",
+		Score:            0,
+		SocketConnection: &SocketConnection{Connected: true},
 	})
 	recalculateRanks(lobby)
 
@@ -146,19 +147,15 @@ func Test_wordSelectionEvent(t *testing.T) {
 		words: []string{firstWordChoice, "def", "ghi"},
 	}
 	wordHintEvents := make(map[string]*GameEvent)
-	lobby.WriteJSON = func(player *Player, object interface{}) error {
-		gameEvent, ok := object.(*GameEvent)
+	lobby.WriteJSON = func(player *SocketConnection, object interface{}) error {
+		_, ok := object.(*GameEvent)
 		if !ok {
 			panic("Unsupported event data type")
 		}
 
-		if gameEvent.Type == "update-wordhint" {
-			wordHintEvents[player.ID] = gameEvent
-		}
-
 		return nil
 	}
-	drawer := lobby.JoinPlayer("Drawer")
+	drawer := lobby.JoinPlayer(&auth.User{Id: "1234", TwitchName: "Drawer"})
 	drawer.Connected = true
 	lobby.Owner = drawer
 	lobby.creator = drawer
@@ -170,7 +167,7 @@ func Test_wordSelectionEvent(t *testing.T) {
 		t.Errorf("Couldn't start lobby: %s", startError)
 	}
 
-	guesser := lobby.JoinPlayer("Guesser")
+	guesser := lobby.JoinPlayer(&auth.User{Id: "1235", TwitchName: "Guesser"})
 	guesser.Connected = true
 
 	choiceError := lobby.HandleEvent(nil, &GameEvent{
@@ -229,18 +226,18 @@ func Test_kickDrawer(t *testing.T) {
 		words: []string{"a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"},
 	}
 	//Dummy to avoid crashes
-	lobby.WriteJSON = func(player *Player, object interface{}) error {
+	lobby.WriteJSON = func(conn *SocketConnection, object interface{}) error {
 		return nil
 	}
 
-	a := lobby.JoinPlayer("a")
+	a := lobby.JoinPlayer(&auth.User{Id: "1234", TwitchName: "TwitchNameA"})
 	a.Connected = true
 	lobby.Owner = a
 	lobby.creator = a
 
-	b := lobby.JoinPlayer("b")
+	b := lobby.JoinPlayer(&auth.User{Id: "1235", TwitchName: "TwitchNameB"})
 	b.Connected = true
-	c := lobby.JoinPlayer("c")
+	c := lobby.JoinPlayer(&auth.User{Id: "1236", TwitchName: "TwitchNameC"})
 	c.Connected = true
 
 	startError := lobby.HandleEvent(nil, &GameEvent{
