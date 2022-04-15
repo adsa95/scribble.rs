@@ -33,7 +33,7 @@ func (a Service) SetUserCookie(w http.ResponseWriter, user *User) error {
 		Value:    tokenString,
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
-		Expires:  time.Now().Add(time.Second * 3600),
+		Expires:  time.Now().Add(time.Minute * 120),
 	})
 
 	return nil
