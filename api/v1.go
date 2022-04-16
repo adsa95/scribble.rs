@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/julienschmidt/httprouter"
 	"github.com/scribble-rs/scribble.rs/auth"
 	"net/http"
 	"strings"
@@ -282,7 +283,11 @@ func GetLobby(r *http.Request) (*game.Lobby, error) {
 	if lobbyID == "" {
 		lobbyID = r.FormValue("lobby_id")
 		if lobbyID == "" {
-			return nil, ErrNoLobbyIDSupplied
+			params := httprouter.ParamsFromContext(r.Context())
+			lobbyID = params.ByName("lobbyId")
+			if lobbyID == "" {
+				return nil, ErrNoLobbyIDSupplied
+			}
 		}
 	}
 

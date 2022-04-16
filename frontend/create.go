@@ -141,5 +141,5 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 
 	log.Printf("%v (%v) created lobby %v", u.TwitchName, u.Id, lobby.LobbyID)
 
-	http.Redirect(w, r, currentBasePageConfig.RootPath+"/lobby?lobby_id="+lobby.LobbyID, http.StatusFound)
+	http.Redirect(w, r, currentBasePageConfig.RootPath+"/lobbies/"+lobby.LobbyID+"/play", http.StatusFound)
 }

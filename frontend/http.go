@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"embed"
+	"github.com/julienschmidt/httprouter"
 	"github.com/scribble-rs/scribble.rs/auth"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"html/template"
@@ -47,27 +48,24 @@ type BasePageConfig struct {
 	RootPath string `json:"rootPath"`
 }
 
-// SetupRoutes registers the official webclient endpoints with the http package.
-func SetupRoutes(a auth.Service, t twitch.Client) {
+// SetupRoutes registers the official webclient endpoints with the router.
+func SetupRoutes(r *httprouter.Router, a auth.Service, t twitch.Client) {
 	authHandler := AuthHandler{
 		authService:  a,
 		twitchClient: t,
 	}
 
-	http.Handle(api.RootPath+"/resources/",
-		http.StripPrefix(api.RootPath,
-			http.FileServer(http.FS(frontendResourcesFS))))
+	r.HandlerFunc("GET", "/", requireUserOrRedirect(a, homePage))
 
-	http.HandleFunc(api.RootPath+"/", requireUserOrRedirect(a, homePage))
+	r.HandlerFunc("GET", "/login", authHandler.ssrLogin)
+	r.HandlerFunc("GET", "/logout", authHandler.ssrLogout)
+	r.HandlerFunc("GET", "/login_twitch_callback", authHandler.ssrTwitchCallback)
 
-	http.HandleFunc(api.RootPath+"/login", authHandler.ssrLogin)
-	http.HandleFunc(api.RootPath+"/logout", authHandler.ssrLogout)
-	http.HandleFunc(api.RootPath+"/login_twitch_callback", authHandler.ssrTwitchCallback)
+	r.HandlerFunc("POST", "/lobbies", requireUserOrRedirect(a, ssrCreateLobby))
+	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireUserOrRedirect(a, ssrEnterLobby))
+	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", ssrObserveLobby)
 
-	http.HandleFunc(api.RootPath+"/lobby", requireUserOrRedirect(a, ssrEnterLobby))
-	http.HandleFunc(api.RootPath+"/create-lobby", requireUserOrRedirect(a, ssrCreateLobby))
-
-	http.HandleFunc(api.RootPath+"/lobby/observe", ssrObserveLobby)
+	r.Handler("GET", "/resources/*path", http.StripPrefix(api.RootPath, http.FileServer(http.FS(frontendResourcesFS))))
 }
 
 // errorPageData represents the data that error.html requires to be displayed.

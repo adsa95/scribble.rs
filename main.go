@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/julienschmidt/httprouter"
+
 	"github.com/scribble-rs/scribble.rs/api"
 	"github.com/scribble-rs/scribble.rs/frontend"
 	"github.com/scribble-rs/scribble.rs/state"
@@ -91,8 +93,10 @@ func main() {
 		RedirectURI:  config.TwitchRedirectURI,
 	}
 
-	api.SetupRoutes(authService)
-	frontend.SetupRoutes(authService, twitchClient)
+	router := httprouter.New()
+
+	api.SetupRoutes(router, authService)
+	frontend.SetupRoutes(router, authService, twitchClient)
 	state.LaunchCleanupRoutine()
 
 	signalChan := make(chan os.Signal, 1)
@@ -110,5 +114,5 @@ func main() {
 	}()
 
 	log.Println("Started.")
-	log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", portHTTP), nil))
+	log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", portHTTP), router))
 }

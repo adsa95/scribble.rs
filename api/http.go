@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/julienschmidt/httprouter"
 	"github.com/scribble-rs/scribble.rs/auth"
 	"net/http"
 	"os"
@@ -22,21 +23,28 @@ func init() {
 	}
 }
 
-// SetupRoutes registers the /v1/ endpoints with the http package.
-func SetupRoutes(authService auth.Service) {
-	http.HandleFunc(RootPath+"/v1/stats", statsEndpoint)
+// SetupRoutes registers the /api/v1/ endpoints with the router.
+func SetupRoutes(r *httprouter.Router, a auth.Service) {
+	// We version the API in order to ensure
+	// backwards compatibility as far as possible.
+	apiPrefix := "/api/v1"
+	apiRouter := httprouter.New()
+
+	apiRouter.HandlerFunc("GET", "/stats", statsEndpoint)
 
 	//The websocket is shared between the public API and the official client
-	http.HandleFunc(RootPath+"/v1/ws/lobby", authService.RequireUser(wsLobbyEndpoint, HttpUnauthorized))
-	http.HandleFunc(RootPath+"/v1/ws/lobby/observe", wsObserveEndpoint)
+	apiRouter.HandlerFunc("GET", "/lobbies/:lobbyId/ws/play", requireUserOrUnauthorized(a, wsLobbyEndpoint))
+	apiRouter.HandlerFunc("GET", "/lobbies/:lobbyId/ws/observe", wsObserveEndpoint)
 
-	//These exist only for the public API. We version them in order to ensure
-	//backwards compatibility as far as possible.
-	http.HandleFunc(RootPath+"/v1/lobby", authService.RequireUser(lobbyEndpoint, HttpUnauthorized))
-	http.HandleFunc(RootPath+"/v1/lobby/player", authService.RequireUser(enterLobbyEndpoint, HttpUnauthorized))
+	//These exist only for the public API.
+	apiRouter.HandlerFunc("GET", "/lobbies/:lobbyId", requireUserOrUnauthorized(a, lobbyEndpoint))
+	apiRouter.HandlerFunc("GET", "/lobbies/:lobbyId/player", requireUserOrUnauthorized(a, enterLobbyEndpoint))
+
+	r.Handler("GET", apiPrefix+"/*path", http.StripPrefix(apiPrefix, apiRouter))
+	r.Handler("POST", apiPrefix+"/*path", http.StripPrefix(apiPrefix, apiRouter))
 }
 
-func requireOrUnauthorized(a auth.Service, h func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
+func requireUserOrUnauthorized(a auth.Service, h func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
 	return a.RequireUser(h, HttpUnauthorized)
 }
 

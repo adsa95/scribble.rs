@@ -47,7 +47,7 @@
                     </div>
 
                     {{end}}
-                    <form id="lobby-create" class="input-container" action="{{.RootPath}}/create-lobby" method="POST">
+                    <form id="lobby-create" class="input-container" action="{{.RootPath}}/lobbies" method="POST">
                         <b>{{.Translation.Get "word-language"}}</b>
                         <select class="input-item" name="language" placeholder="Choose your language">
                             {{$language := .Language}}
@@ -141,7 +141,7 @@
         let customWordsDetail = document.getElementById("custom-words-detail");
 
         function onJoin() {
-            window.open("{{.RootPath}}/lobby?lobby_id=" + selectedLobby, "_self");
+            window.open("{{.RootPath}}/lobbies/" + selectedLobby + "/play", "_self");
         }
 
         function loadLobbyTable() {

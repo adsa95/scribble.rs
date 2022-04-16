@@ -40,7 +40,7 @@
                             <img src="{{.RootPath}}/resources/fullscreen.svg" class="header-button-image" />
                         </button>
                         <button
-                            onclick="window.open('{{.RootPath}}/lobby/observe?lobby_id={{.LobbyData.LobbyID}}')"
+                            onclick="window.open('{{.RootPath}}/lobbies/{{.LobbyData.LobbyID}}/observe')"
                             class="dialog-button header-button"
                             alt="{{.Translation.Get "open-observe"}}"
                             title="{{.Translation.Get "open-observe"}}">
@@ -373,10 +373,10 @@
 
             if (location.protocol === "https:") {
                 console.log("Attempting secure socket connection on port " + location.port + "...");
-                socket = new WebSocket("wss://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws/lobby?lobby_id={{.LobbyID}}");
+                socket = new WebSocket("wss://" + location.hostname + ":" + location.port + "{{.RootPath}}/api/v1/lobbies/{{.LobbyID}}/ws/play");
             } else {
                 console.log("Attempting socket connection on port " + location.port + "...");
-                socket = new WebSocket("ws://" + location.hostname + ":" + location.port + "{{.RootPath}}/v1/ws/lobby?lobby_id={{.LobbyID}}");
+                socket = new WebSocket("ws://" + location.hostname + ":" + location.port + "{{.RootPath}}/api/v1/lobbies/{{.LobbyID}}/ws/play");
             }
 
             socket.onerror = error => {
