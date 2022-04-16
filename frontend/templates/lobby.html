@@ -39,6 +39,13 @@
                             title="{{.Translation.Get "toggle-fullscreen"}}">
                             <img src="{{.RootPath}}/resources/fullscreen.svg" class="header-button-image" />
                         </button>
+                        <button
+                            onclick="window.open('{{.RootPath}}/lobby/observe?lobby_id={{.LobbyData.LobbyID}}')"
+                            class="dialog-button header-button"
+                            alt="{{.Translation.Get "open-observe"}}"
+                            title="{{.Translation.Get "open-observe"}}">
+                            <img src="{{.RootPath}}/resources/observe.png" class="header-button-image" />
+                        </button>
                     </div>
                     <div id="word-container"></div>
                     <div>

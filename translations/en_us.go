@@ -3,6 +3,8 @@ package translations
 func initEnglishTranslation() Translation {
 	translation := createTranslation()
 
+	translation.put("open-observe", "Open observer mode")
+
 	translation.put("login-required", "Login required")
 	translation.put("login-required-hint", "In order to prevent abuse, you must login using Twitch to play the game.")
 	translation.put("login-with-twitch", "Login with Twitch")
