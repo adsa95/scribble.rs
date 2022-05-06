@@ -504,9 +504,11 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 		}
 	}
 
-	//We need this for the next-turn / game-over event, in order to allow the
-	//client to know which word was previously supposed to be guessed.
-	previousWord := lobby.CurrentWord
+	if lobby.CurrentWord != "" {
+		sendTurnOver(lobby, lobby.CurrentWord)
+		time.Sleep(5 * time.Second)
+	}
+
 	lobby.CurrentWord = ""
 	lobby.wordHints = nil
 
@@ -543,8 +545,7 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 				lobby.WriteJSON(player.SocketConnection, GameEvent{
 					Type: "game-over",
 					Data: &GameOverEvent{
-						PreviousWord: previousWord,
-						PlayerReady:  readyData,
+						PlayerReady: readyData,
 					}})
 			}
 
@@ -571,10 +572,35 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 		Round:        lobby.Round,
 		Players:      lobby.players,
 		RoundEndTime: int(lobby.RoundEndTime - getTimeAsMillis()),
-		PreviousWord: previousWord,
 	})
 
 	lobby.WriteJSON(lobby.drawer.SocketConnection, &GameEvent{Type: "your-turn", Data: lobby.wordChoice})
+}
+
+type TurnOverEvent struct {
+	Word   string             `json:"word"`
+	Result []TurnPlayerResult `json:"result"`
+}
+
+type TurnPlayerResult struct {
+	Name  string `json:"name"`
+	Score int    `json:"score"`
+}
+
+func sendTurnOver(lobby *Lobby, word string) {
+	TurnResult := make([]TurnPlayerResult, len(lobby.players))
+
+	for i, player := range lobby.players {
+		TurnResult[i] = TurnPlayerResult{
+			Name:  player.Name,
+			Score: player.LastScore,
+		}
+	}
+
+	lobby.TriggerUpdateEvent("turn-over", &TurnOverEvent{
+		Word:   word,
+		Result: TurnResult,
+	})
 }
 
 // advanceLobby will either start the game or jump over to the next turn.
@@ -590,7 +616,6 @@ func advanceLobby(lobby *Lobby) {
 // game is over already.
 type GameOverEvent struct {
 	*PlayerReady
-	PreviousWord string `json:"previousWord"`
 }
 
 // determineNextDrawer returns the next person that's supposed to be drawing, but
@@ -702,6 +727,11 @@ func getTimeAsMillis() int64 {
 	return time.Now().UTC().UnixNano() / 1000000
 }
 
+type TurnOver struct {
+	Round      int    `json:"round"`
+	RevealWord string `json:"revealWord"`
+}
+
 // NextTurn represents the data necessary for displaying the lobby state right
 // after a new turn started. Meaning that no word has been chosen yet and
 // therefore there are no wordhints and no current drawing instructions.
@@ -709,10 +739,6 @@ type NextTurn struct {
 	Round        int       `json:"round"`
 	Players      []*Player `json:"players"`
 	RoundEndTime int       `json:"roundEndTime"`
-	//PreviousWord signals the last chosen word. If empty, no word has been
-	//chosen. The client can now themselves whether there has been a previous
-	//turn, by looking at the current gamestate.
-	PreviousWord string `json:"previousWord"`
 }
 
 // recalculateRanks will assign each player his respective rank in the lobby

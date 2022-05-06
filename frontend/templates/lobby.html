@@ -157,6 +157,13 @@
                             </div>
                         </div>
 
+                        <div id="turn-over-dialog" class="center-dialog">
+                            <span id="game-over-dialog-title" class="dialog-title">Turn over!</span>
+                            <div class="center-dialog-content">
+                                <div id="turn-over-scoreboard"></div>
+                            </div>
+                        </div>
+
                         <div id="game-over-dialog" class="center-dialog">
                             <span id="game-over-dialog-title" class="dialog-title">Game over!</span>
                             <div class="center-dialog-content">
@@ -480,6 +487,9 @@
 
         const kickDialog = document.getElementById("kick-dialog");
         const kickDialogPlayers = document.getElementById("kick-dialog-players");
+
+        const turnOverDialog = document.getElementById('turn-over-dialog');
+        const turnOverScoreboard = document.getElementById('turn-over-scoreboard');
 
         const soundToggleLabel = document.getElementById("sound-toggle-label");
         let sound = localStorage.getItem("sound") !== "false";
@@ -944,14 +954,52 @@
         let gameState = "unstarted";
         let drawingTimeSetting = "∞";
 
+        function handleTurnOverEvent(data) {
+            turnOverDialog.style.visibility = "visible";
+
+            turnOverScoreboard.innerHTML = "";
+            data.result.sort((a, b)  => {
+                return a.score - b.score
+            }).forEach((result, i) => {
+                turnOverScoreboard.appendChild(scoreboardEntry(i+1, result.name, result.score))
+            })
+        }
+
+        function scoreboardEntry(rank, name, score) {
+            const entry = document.createElement("div")
+            entry.classList.add("gameover-scoreboard-entry");
+
+            const rankDiv = document.createElement("div");
+            rankDiv.classList.add("gameover-scoreboard-rank");
+            rankDiv.innerText = rank;
+
+            const nameDiv = document.createElement("div");
+            nameDiv.classList.add("gameover-scoreboard-name");
+            nameDiv.innerText = name;
+
+            const scoreSpan = document.createElement("span");
+            scoreSpan.classList.add("gameover-scoreboard-score");
+            scoreSpan.innerText = score;
+
+            entry.append(rankDiv, nameDiv, scoreSpan);
+
+            return entry
+        }
+
         function registerMessageHandler(targetSocket) {
             targetSocket.onmessage = event => {
                 const parsed = JSON.parse(event.data);
                 if (parsed.type === "ready") {
                     handleReadyEvent(parsed.data);
+                } else if (parsed.type === "turn-over") {
+                    showRoundEndMessage(parsed.data.word)
+
+                    //This dialog could potentially stay visible from last
+                    //turn, in case nobody has chosen a word.
+                    waitChooseDialog.style.visibility = "hidden";
+                    handleTurnOverEvent(parsed.data)
                 } else if (parsed.type === "game-over") {
                     let ready = parsed.data;
-                    showRoundEndMessage(ready.previousWord);
                     handleReadyEvent(ready);
                 } else if (parsed.type === "update-players") {
                     applyPlayers(parsed.data);
@@ -986,6 +1034,7 @@
                     clear(context);
                 } else if (parsed.type === "next-turn") {
                     setRoundEndTime(parsed.data.roundEndTime);
+                    gameState = "ongoing";
 
                     //As soon as a turn starts, the round should be ongoing, so we make
                     //sure that all types of dialogs, that indicate the game isn't
@@ -994,6 +1043,7 @@
                     startDialog.style.visibility = "hidden";
                     restartButton.style.display = "none";
                     gameOverDialog.style.visibility = "hidden";
+                    turnOverDialog.style.visibility = "hidden";
 
                     //If a player doesn't choose, the dialog will still be up.
                     wordDialog.style.visibility = "hidden";
@@ -1018,14 +1068,6 @@
 
                     allowDrawing = false;
                     updateCursor();
-
-                    if (gameState === "ongoing") {
-                        //The previous turn has ended.
-                        showRoundEndMessage(parsed.data.previousWord);
-                    } else {
-                        //First turn, the game starts
-                        gameState = "ongoing";
-                    }
                 } else if (parsed.type === "your-turn") {
                     playWav('{{.RootPath}}/resources/your-turn.wav');
                     //This dialog could potentially stay visible from last
@@ -1126,6 +1168,9 @@
                 applyWordHints(ready.wordHints);
             }
             updateCursor();
+
+            // Might still be showing in certain cases
+            turnOverDialog.style.visibility = "hidden";
 
             if (ready.gameState === "unstarted") {
                 if (ownerID === ownID) {
