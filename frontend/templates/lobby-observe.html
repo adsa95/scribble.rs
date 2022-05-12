@@ -404,6 +404,14 @@
         let delaySeconds = 15;
         let kickedPlayerIds = [];
 
+        function shouldDelay(parsed) {
+            if (parsed.type === 'ready' && parsed.data.gameState === 'unstarted') {
+                return false
+            }
+
+            return true
+        }
+
         function handleMessage(event, isDelayed) {
             const parsed = JSON.parse(event.data);
 
@@ -415,7 +423,9 @@
                 if (kickedPlayerIds.includes(drawerID)) {
                     clear(context)
                 }
-            } else if (!isDelayed) {
+            } else if (!isDelayed && shouldDelay(parsed)) {
+                console.log(event)
+                console.log('delaying')
                 return setTimeout(() => handleMessage(event, true), delaySeconds * 1000)
             }
 
