@@ -992,6 +992,16 @@
             return entry
         }
 
+        function removeMessages(authorId) {
+            authorId = String(authorId)
+            for (let i = messageContainer.children.length - 1; i >= 0; i--) {
+                let child = messageContainer.children.item(i);
+                if (child.hasAttribute('x-data-author-id') && child.getAttribute('x-data-author-id') === authorId) {
+                    messageContainer.removeChild(child)
+                }
+            }
+        }
+
         function registerMessageHandler(targetSocket) {
             targetSocket.onmessage = event => {
                 const parsed = JSON.parse(event.data);
@@ -1027,7 +1037,7 @@
                     waitChooseDialog.style.visibility = "hidden";
                     applyWordHints(parsed.data);
                 } else if (parsed.type === "message") {
-                    appendMessage(null, parsed.data.author, parsed.data.content);
+                    appendMessage(null, parsed.data.author, parsed.data.content, parsed.data.authorId);
                 } else if (parsed.type === "system-message") {
                     appendMessage("system-message", '{{.Translation.Get "system"}}', parsed.data);
                 } else if (parsed.type === "non-guessing-player-message") {
@@ -1083,6 +1093,7 @@
                 } else if (parsed.type === "drawing") {
                     applyDrawData(parsed.data);
                 } else if (parsed.type === "kick") {
+                    removeMessages(parsed.data.playerId)
                     if (parsed.data.playerId === ownID) {
                         alert('{{.Translation.Get "self-kicked"}}');
                         document.location.href = "{{.RootPath}}/";
@@ -1303,7 +1314,7 @@
         //appendMessage adds a new message to the message container. If the
         //message amount is too high, we cut off a part of the messages to
         //prevent lagging and useless memory usage.
-        function appendMessage(styleClass, author, message) {
+        function appendMessage(styleClass, author, message, authorId) {
             if (messageContainer.childElementCount >= 100) {
                 messageContainer.removeChild(messageContainer.firstChild);
             }
@@ -1312,6 +1323,10 @@
             newMessageDiv.classList.add("message");
             if (styleClass !== null && styleClass !== "") {
                 newMessageDiv.classList.add(styleClass);
+            }
+
+            if (authorId !== null) {
+                newMessageDiv.setAttribute('x-data-author-id', authorId);
             }
 
             if (author !== null && author !== "") {

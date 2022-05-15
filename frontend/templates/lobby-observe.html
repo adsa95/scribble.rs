@@ -412,20 +412,26 @@
             return true
         }
 
+        function removeMessages(authorId) {
+            authorId = String(authorId)
+            for (let i = messageContainer.children.length - 1; i >= 0; i--) {
+                let child = messageContainer.children.item(i);
+                if (child.hasAttribute('x-data-author-id') && child.getAttribute('x-data-author-id') === authorId) {
+                    messageContainer.removeChild(child)
+                }
+            }
+        }
+
         function handleMessage(event, isDelayed) {
             const parsed = JSON.parse(event.data);
 
             if (!isDelayed && parsed.type === 'kick') {
                 kickedPlayerIds.push(parsed.data.playerId)
-                console.log(kickedPlayerIds)
-                console.log(drawerID)
-                console.log(kickedPlayerIds.includes(drawerID))
+                removeMessages(parsed.data.playerId)
                 if (kickedPlayerIds.includes(drawerID)) {
                     clear(context)
                 }
             } else if (!isDelayed && shouldDelay(parsed)) {
-                console.log(event)
-                console.log('delaying')
                 return setTimeout(() => handleMessage(event, true), delaySeconds * 1000)
             }
 
@@ -461,7 +467,7 @@
                 waitChooseDialog.style.visibility = "hidden";
                 applyWordHints(parsed.data);
             } else if (parsed.type === "message") {
-                appendMessage(null, parsed.data.author, parsed.data.content);
+                appendMessage(null, parsed.data.author, parsed.data.content, parsed.data.authorId);
             } else if (parsed.type === "system-message") {
                 appendMessage("system-message", '{{.Translation.Get "system"}}', parsed.data);
             } else if (parsed.type === "non-guessing-player-message") {
@@ -518,9 +524,6 @@
                 }
 
                 applyDrawData(parsed.data);
-            } else if (parsed.type === "kick") {
-                let kickMessage = '{{.Translation.Get "player-kicked"}}'.format(parsed.data.playerName);
-                appendMessage("system-message", '{{.Translation.Get "system"}}', kickMessage);
             } else if (parsed.type === "owner-change") {
                 ownerID = parsed.data.playerId;
                 appendMessage("system-message", '{{.Translation.Get "system"}}', '{{.Translation.Get "owner-change"}}'.format(parsed.data.playerName));
@@ -697,7 +700,11 @@
         //appendMessage adds a new message to the message container. If the
         //message amount is too high, we cut off a part of the messages to
         //prevent lagging and useless memory usage.
-        function appendMessage(styleClass, author, message) {
+        function appendMessage(styleClass, author, message, authorId) {
+            if (kickedPlayerIds.includes(authorId)) {
+                return;
+            }
+
             if (messageContainer.childElementCount >= 100) {
                 messageContainer.removeChild(messageContainer.firstChild);
             }
@@ -706,6 +713,10 @@
             newMessageDiv.classList.add("message");
             if (styleClass !== null && styleClass !== "") {
                 newMessageDiv.classList.add(styleClass);
+            }
+
+            if (authorId !== null) {
+                newMessageDiv.setAttribute('x-data-author-id', authorId);
             }
 
             if (author !== null && author !== "") {
