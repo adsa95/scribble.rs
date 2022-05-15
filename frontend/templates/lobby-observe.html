@@ -401,7 +401,7 @@
             targetSocket.onmessage = event => handleMessage(event, false)
         }
 
-        let delaySeconds = 15;
+        let delaySeconds = {{ .DelaySeconds }};
         let kickedPlayerIds = [];
 
         function shouldDelay(parsed) {

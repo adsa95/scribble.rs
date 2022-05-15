@@ -4,6 +4,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/auth"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/scribble-rs/scribble.rs/api"
@@ -17,6 +18,11 @@ type lobbyPageData struct {
 
 	Translation translations.Translation
 	Locale      string
+}
+
+type observePageData struct {
+	*lobbyPageData
+	DelaySeconds int
 }
 
 type robotPageData struct {
@@ -45,13 +51,23 @@ func ssrObserveLobby(w http.ResponseWriter, r *http.Request) {
 
 	translation, locale := determineTranslation(r)
 
-	var pageData *lobbyPageData
+	var delaySeconds int
+	delaySeconds, _ = strconv.Atoi(r.URL.Query().Get("delay"))
+
+	if delaySeconds < 0 {
+		delaySeconds = 0
+	}
+
+	var pageData *observePageData
 	lobby.Synchronized(func() {
-		pageData = &lobbyPageData{
-			BasePageConfig: currentBasePageConfig,
-			LobbyData:      api.CreateLobbyData(lobby),
-			Translation:    translation,
-			Locale:         locale,
+		pageData = &observePageData{
+			lobbyPageData: &lobbyPageData{
+				BasePageConfig: currentBasePageConfig,
+				LobbyData:      api.CreateLobbyData(lobby),
+				Translation:    translation,
+				Locale:         locale,
+			},
+			DelaySeconds: delaySeconds,
 		}
 	})
 
