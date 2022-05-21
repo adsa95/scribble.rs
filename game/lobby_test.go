@@ -155,7 +155,7 @@ func Test_wordSelectionEvent(t *testing.T) {
 
 		return nil
 	}
-	drawer := lobby.JoinPlayer(&auth.User{Id: "1234", TwitchName: "Drawer"})
+	drawer := lobby.JoinPlayer(&auth.User{Id: "1234", Name: "Drawer"})
 	drawer.Connected = true
 	lobby.Owner = drawer
 	lobby.creator = drawer
@@ -167,7 +167,7 @@ func Test_wordSelectionEvent(t *testing.T) {
 		t.Errorf("Couldn't start lobby: %s", startError)
 	}
 
-	guesser := lobby.JoinPlayer(&auth.User{Id: "1235", TwitchName: "Guesser"})
+	guesser := lobby.JoinPlayer(&auth.User{Id: "1235", Name: "Guesser"})
 	guesser.Connected = true
 
 	choiceError := lobby.HandleEvent(nil, &GameEvent{
@@ -230,14 +230,14 @@ func Test_kickDrawer(t *testing.T) {
 		return nil
 	}
 
-	a := lobby.JoinPlayer(&auth.User{Id: "1234", TwitchName: "TwitchNameA"})
+	a := lobby.JoinPlayer(&auth.User{Id: "1234", Name: "TwitchNameA"})
 	a.Connected = true
 	lobby.Owner = a
 	lobby.creator = a
 
-	b := lobby.JoinPlayer(&auth.User{Id: "1235", TwitchName: "TwitchNameB"})
+	b := lobby.JoinPlayer(&auth.User{Id: "1235", Name: "TwitchNameB"})
 	b.Connected = true
-	c := lobby.JoinPlayer(&auth.User{Id: "1236", TwitchName: "TwitchNameC"})
+	c := lobby.JoinPlayer(&auth.User{Id: "1236", Name: "TwitchNameC"})
 	c.Connected = true
 
 	startError := lobby.HandleEvent(nil, &GameEvent{

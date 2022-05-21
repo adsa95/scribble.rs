@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/database"
 	"log"
 	"net/http"
 
@@ -13,9 +14,13 @@ import (
 
 //This file contains the API for the official web client.
 
+type CreateHandler struct {
+	db *database.DB
+}
+
 // homePage servers the default page for scribble.rs, which is the page to
 // create a new lobby.
-func homePage(w http.ResponseWriter, r *http.Request, u auth.User) {
+func (h *CreateHandler) homePage(w http.ResponseWriter, r *http.Request, u auth.User) {
 	translation, locale := determineTranslation(r)
 	createPageData := createDefaultLobbyCreatePageData()
 	createPageData.Translation = translation
@@ -60,7 +65,7 @@ type LobbyCreatePageData struct {
 
 // ssrCreateLobby allows creating a lobby, optionally returning errors that
 // occurred during creation.
-func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
+func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	formParseError := r.ParseForm()
 	if formParseError != nil {
 		http.Error(w, formParseError.Error(), http.StatusBadRequest)
@@ -123,14 +128,10 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 		return
 	}
 
-	_, lobby, createError := game.CreateLobby(&u, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
+	_, lobby, createError := game.CreateLobby(h.db, &u, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
 	if createError != nil {
 		pageData.Errors = append(pageData.Errors, createError.Error())
-		templateError := pageTemplates.ExecuteTemplate(w, "lobby-create-page", pageData)
-		if templateError != nil {
-			userFacingError(w, templateError.Error())
-		}
-
+		_ = pageTemplates.ExecuteTemplate(w, "lobby-create-page", pageData)
 		return
 	}
 
@@ -138,8 +139,9 @@ func ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 
 	//We only add the lobby if we could do all necessary pre-steps successfully.
 	state.AddLobby(lobby)
+	// TODO: _ = h.db.AddLobby(&u, lobby.LobbyID)
 
-	log.Printf("%v (%v) created lobby %v", u.TwitchName, u.Id, lobby.LobbyID)
+	log.Printf("%v (%v) created lobby %v", u.Name, u.Id, lobby.LobbyID)
 
 	http.Redirect(w, r, currentBasePageConfig.RootPath+"/lobbies/"+lobby.LobbyID+"/play", http.StatusFound)
 }

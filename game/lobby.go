@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/database"
 	"log"
 	"math"
 	"math/rand"
@@ -369,8 +370,8 @@ func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 		return
 	}
 
-	//Only lobby creator can kick
-	if player != lobby.creator {
+	//Only lobby mods can kick
+	if !lobby.IsMod(player.user) {
 		return
 	}
 
@@ -388,6 +389,11 @@ func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 	}
 
 	playerToKick := lobby.players[playerToKickIndex]
+
+	//Only the lobby creator can kick other mods
+	if lobby.IsMod(playerToKick.user) && player.ID != lobby.creator.ID {
+		return
+	}
 
 	kickEvent := &GameEvent{
 		Type: "kick",
@@ -854,7 +860,7 @@ func (lobby *Lobby) triggerPlayersUpdate() {
 
 // CreateLobby creates a new lobby including the initial player (owner) and
 // optionally returns an error, if any occurred during creation.
-func CreateLobby(user *auth.User, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance int, customWords []string) (*Player, *Lobby, error) {
+func CreateLobby(db *database.DB, user *auth.User, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance int, customWords []string) (*Player, *Lobby, error) {
 	lobby := &Lobby{
 		LobbyID: uuid.Must(uuid.NewV4()).String(),
 		EditableLobbySettings: &EditableLobbySettings{
@@ -867,6 +873,7 @@ func CreateLobby(user *auth.User, chosenLanguage string, publicLobby bool, drawi
 		CustomWords:    customWords,
 		currentDrawing: make([]interface{}, 0),
 		State:          Unstarted,
+		db:             db,
 		mutex:          &sync.Mutex{},
 	}
 
@@ -888,7 +895,7 @@ func CreateLobby(user *auth.User, chosenLanguage string, publicLobby bool, drawi
 		}
 	}
 
-	player := createPlayer(user)
+	player := createPlayer(user, true)
 
 	lobby.players = append(lobby.players, player)
 	lobby.Owner = player
@@ -1066,7 +1073,7 @@ func (lobby *Lobby) GetAvailableWordHints(state PlayerState) []*WordHint {
 // JoinPlayer creates a new player object using the given name and adds it
 // to the lobbies playerlist. The new players is returned.
 func (lobby *Lobby) JoinPlayer(user *auth.User) *Player {
-	player := createPlayer(user)
+	player := createPlayer(user, lobby.IsMod(user))
 
 	lobby.players = append(lobby.players, player)
 

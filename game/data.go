@@ -2,6 +2,7 @@ package game
 
 import (
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/database"
 	"sync"
 	"time"
 
@@ -16,6 +17,8 @@ const slotReservationTime = time.Minute * 5
 type Lobby struct {
 	// ID uniquely identified the Lobby.
 	LobbyID string
+
+	db *database.DB
 
 	*EditableLobbySettings
 
@@ -163,10 +166,6 @@ type Fill struct {
 	Color RGBColor `json:"color"`
 }
 
-// MaxPlayerNameLength defines how long a string can be at max when used
-// as the playername.
-const MaxPlayerNameLength int = 30
-
 type SocketConnection struct {
 	ws          *websocket.Conn
 	socketMutex *sync.Mutex
@@ -218,6 +217,7 @@ type Player struct {
 	LastScore int         `json:"lastScore"`
 	Rank      int         `json:"rank"`
 	State     PlayerState `json:"state"`
+	Mod       bool        `json:"mod"`
 }
 
 // GetWebsocket simply returns the players websocket connection. This method
@@ -256,6 +256,10 @@ const (
 
 // GetPlayer searches for a player, identifying them by usersession.
 func (lobby *Lobby) GetPlayer(user *auth.User) *Player {
+	if user == nil {
+		return nil
+	}
+
 	for _, player := range lobby.players {
 		if player.user.Id == user.Id {
 			return player
@@ -283,16 +287,17 @@ func (lobby *Lobby) AppendFill(fill *FillEvent) {
 	lobby.currentDrawing = append(lobby.currentDrawing, fill)
 }
 
-func createPlayer(user *auth.User) *Player {
+func createPlayer(user *auth.User, mod bool) *Player {
 	return &Player{
 		SocketConnection: &SocketConnection{
 			socketMutex: &sync.Mutex{},
 			Connected:   false,
 		},
-		Name:  user.TwitchName,
+		Name:  user.Name,
 		ID:    user.Id,
 		user:  user,
 		State: Guessing,
+		Mod:   mod,
 	}
 }
 
@@ -404,6 +409,36 @@ func (lobby *Lobby) Synchronized(logic func()) {
 func (lobby Lobby) HasBeenKicked(user *auth.User) bool {
 	for _, u := range lobby.KickedUsers {
 		if user.Id == u.Id {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (lobby *Lobby) IsBanned(user *auth.User) bool {
+	banned, err := lobby.db.GetBannedForChannel(lobby.creator.user.Id)
+	if err != nil {
+		return false
+	}
+
+	for _, u := range *banned {
+		if u.Id == user.Id {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (lobby *Lobby) IsMod(user *auth.User) bool {
+	mods, err := lobby.db.GetModsForChannel(lobby.creator.user.Id)
+	if err != nil {
+		return false
+	}
+
+	for _, u := range *mods {
+		if u.Id == user.Id {
 			return true
 		}
 	}

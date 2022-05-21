@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/scribble-rs/scribble.rs/auth"
+	config2 "github.com/scribble-rs/scribble.rs/config"
+	"github.com/scribble-rs/scribble.rs/database"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
 	"math/rand"
@@ -80,23 +82,25 @@ func main() {
 	//Setting the seed in order for the petnames to be random.
 	rand.Seed(time.Now().UnixNano())
 
-	config := ConfigFromEnv()
+	config := config2.FromEnv()
 
-	authService := auth.Service{
+	authService := &auth.Service{
 		JwtKey:        []byte(config.JwtKey),
 		JwtCookieName: config.JwtCookieName,
 	}
 
-	twitchClient := twitch.Client{
+	twitchClient := &twitch.Client{
 		ClientId:     config.TwitchClientId,
 		ClientSecret: config.TwitchClientSecret,
 		RedirectURI:  config.TwitchRedirectURI,
 	}
 
+	db, _ := database.FromDatabaseUrl(config.DatabaseUrl)
+
 	router := httprouter.New()
 
-	api.SetupRoutes(router, authService)
-	frontend.SetupRoutes(router, authService, twitchClient)
+	api.SetupRoutes(router, authService, db)
+	frontend.SetupRoutes(config.GenerateUrl, router, authService, twitchClient, db)
 	state.LaunchCleanupRoutine()
 
 	signalChan := make(chan os.Signal, 1)

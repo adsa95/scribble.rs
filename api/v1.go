@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/database"
 	"net/http"
 	"strings"
 
@@ -33,7 +34,11 @@ type LobbyEntry struct {
 	Wordpack        string `json:"wordpack"`
 }
 
-func publicLobbies(w http.ResponseWriter, r *http.Request) {
+type Handler struct {
+	Db *database.DB
+}
+
+func (h *Handler) publicLobbies(w http.ResponseWriter, r *http.Request) {
 	//REMARK: If paging is ever implemented, we might want to maintain order
 	//when deleting lobbies from state in the state package.
 
@@ -59,7 +64,7 @@ func publicLobbies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
+func (h *Handler) createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	formParseError := r.ParseForm()
 	if formParseError != nil {
 		http.Error(w, formParseError.Error(), http.StatusBadRequest)
@@ -102,7 +107,7 @@ func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 		return
 	}
 
-	_, lobby, createError := game.CreateLobby(&user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
+	_, lobby, createError := game.CreateLobby(h.Db, &user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
 	if createError != nil {
 		http.Error(w, createError.Error(), http.StatusBadRequest)
 		return
@@ -118,9 +123,10 @@ func createLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 
 	//We only add the lobby if everything else was successful.
 	state.AddLobby(lobby)
+	//h.Db.AddLobby(&user, lobby.LobbyID)
 }
 
-func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
+func (h *Handler) enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
 	lobby, success := getLobbyWithErrorHandling(w, r)
 	if !success {
 		return
@@ -133,12 +139,12 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) 
 
 		if player == nil {
 			if !lobby.HasFreePlayerSlot() {
-				http.Error(w, "lobby already full", http.StatusUnauthorized)
+				http.Error(w, "lobby already full", http.StatusForbidden)
 				return
 			}
 
-			if lobby.HasBeenKicked(&user) {
-				http.Error(w, "you've been kicked from this lobby", http.StatusUnauthorized)
+			if lobby.HasBeenKicked(&user) || lobby.IsBanned(&user) {
+				http.Error(w, "you've been banned from this lobby", http.StatusForbidden)
 				return
 			}
 
@@ -156,7 +162,7 @@ func enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) 
 	}
 }
 
-func editLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
+func (h *Handler) editLobby(w http.ResponseWriter, r *http.Request, user auth.User) {
 	lobby, success := getLobbyWithErrorHandling(w, r)
 	if !success {
 		return
@@ -258,19 +264,19 @@ func getLobbyWithErrorHandling(w http.ResponseWriter, r *http.Request) (*game.Lo
 	return lobby, true
 }
 
-func lobbyEndpoint(w http.ResponseWriter, r *http.Request, u auth.User) {
+func (h *Handler) lobbyEndpoint(w http.ResponseWriter, r *http.Request, u auth.User) {
 	if r.Method == http.MethodGet {
-		publicLobbies(w, r)
+		h.publicLobbies(w, r)
 	} else if r.Method == http.MethodPatch {
-		editLobby(w, r, u)
+		h.editLobby(w, r, u)
 	} else if r.Method == http.MethodPost || r.Method == http.MethodPut {
-		createLobby(w, r, u)
+		h.createLobby(w, r, u)
 	} else {
 		http.Error(w, fmt.Sprintf("method %s not supported", r.Method), http.StatusMethodNotAllowed)
 	}
 }
 
-func statsEndpoint(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) statsEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(state.Stats())
 }

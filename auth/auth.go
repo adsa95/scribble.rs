@@ -8,8 +8,8 @@ import (
 )
 
 type User struct {
-	Id         string
-	TwitchName string
+	Id   string
+	Name string
 }
 
 type UserClaims struct {

@@ -6,8 +6,8 @@ func initEnglishTranslation() Translation {
 	translation.put("open-observe", "Open observer mode")
 
 	translation.put("login-required", "Login required")
-	translation.put("login-required-hint", "In order to prevent abuse, you must login using Twitch to play the game.")
-	translation.put("login-with-twitch", "Login with Twitch")
+	translation.put("login-required-hint", "In order to prevent abuse, you must authenticate using Twitch to play.")
+	translation.put("login-with-twitch", "Authenticate with Twitch")
 
 	translation.put("requires-js", "This website requires JavaScript to run properly.")
 
