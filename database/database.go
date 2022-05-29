@@ -32,8 +32,8 @@ func FromDatabaseUrl(databaseUrl string) (*DB, error) {
 	return &DB{executor: db}, nil
 }
 
-func (d *DB) UpsertUser(user auth.User) error {
-	_, err := d.executor.NamedQuery(`INSERT INTO users (id, name, created_at, updated_at) VALUES (:id, :name, NOW(), NOW()) ON CONFLICT (id) DO UPDATE SET id = :id, name = :name, updated_at = NOW()`, struct {
+func (d *DB) UpsertUser(user *auth.User) error {
+	_, err := d.executor.NamedQuery(`INSERT INTO users (id, name, created_at, updated_at) VALUES (:id, :name, NOW(), NOW()) ON CONFLICT (id) DO UPDATE SET name = :name, updated_at = NOW()`, struct {
 		Id   string `db:"id"`
 		Name string `db:"name"`
 	}{
@@ -45,7 +45,7 @@ func (d *DB) UpsertUser(user auth.User) error {
 }
 
 func (d *DB) AddLobby(user *auth.User, lobbyId string) error {
-	_, err := d.executor.Exec("INSERT INTO lobbies (user_id, lobby_id, created_at) VALUES ($1, $2, NOW())", user.Id, lobbyId)
+	_, err := d.executor.Exec("INSERT INTO lobbies (id, user_id, created_at) VALUES ($1, $2, NOW())", lobbyId, user.Id)
 	return err
 }
 
@@ -150,4 +150,13 @@ func (d *DB) SetBannedForChannel(channelId string, banned []twitch.BannedUserEnt
 	}
 
 	return nil
+}
+
+func (d *DB) GetLastLobbyForUser(username string) (string, error) {
+	var row struct {
+		LobbyId string `db:"id"`
+	}
+
+	err := d.executor.Get(&row, "SELECT id FROM lobbies WHERE user_id = (SELECT id FROM users WHERE name ILIKE $1 ORDER BY updated_at DESC LIMIT 1) ORDER BY created_at DESC LIMIT 1", username)
+	return row.LobbyId, err
 }

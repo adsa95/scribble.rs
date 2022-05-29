@@ -89,6 +89,17 @@ func (a Service) GetUser(r *http.Request) (*User, error) {
 	return nil, fmt.Errorf("unknown JWT parsing error")
 }
 
+func (a *Service) CheckUser(handler func(w http.ResponseWriter, r *http.Request, user *User)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, err := a.GetUser(r)
+		if err != nil {
+			handler(w, r, nil)
+		} else {
+			handler(w, r, user)
+		}
+	}
+}
+
 func (a Service) RequireUser(successHandler func(http.ResponseWriter, *http.Request, User), errorhandler func(http.ResponseWriter, *http.Request, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.GetUser(r)

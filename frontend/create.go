@@ -18,11 +18,11 @@ type CreateHandler struct {
 	db *database.DB
 }
 
-// homePage servers the default page for scribble.rs, which is the page to
+// ssrCreateForm servers the default page for scribble.rs, which is the page to
 // create a new lobby.
-func (h *CreateHandler) homePage(w http.ResponseWriter, r *http.Request, u auth.User) {
+func (h *CreateHandler) ssrCreateForm(w http.ResponseWriter, r *http.Request, u auth.User) {
 	translation, locale := determineTranslation(r)
-	createPageData := createDefaultLobbyCreatePageData()
+	createPageData := createDefaultLobbyCreatePageData(&u)
 	createPageData.Translation = translation
 	createPageData.Locale = locale
 
@@ -32,23 +32,23 @@ func (h *CreateHandler) homePage(w http.ResponseWriter, r *http.Request, u auth.
 	}
 }
 
-func createDefaultLobbyCreatePageData() *LobbyCreatePageData {
+func createDefaultLobbyCreatePageData(user *auth.User) *LobbyCreatePageData {
 	return &LobbyCreatePageData{
-		BasePageConfig:    currentBasePageConfig,
-		SettingBounds:     game.LobbySettingBounds,
-		Languages:         game.SupportedLanguages,
-		Public:            "false",
-		DrawingTime:       "120",
-		Rounds:            "4",
-		MaxPlayers:        "12",
-		CustomWordsChance: "50",
-		Language:          "english",
+		AuthenticatedBasePageData: NewAuthenticatedBasePageData(api.RootPath, user),
+		SettingBounds:             game.LobbySettingBounds,
+		Languages:                 game.SupportedLanguages,
+		Public:                    "false",
+		DrawingTime:               "120",
+		Rounds:                    "4",
+		MaxPlayers:                "12",
+		CustomWordsChance:         "50",
+		Language:                  "english",
 	}
 }
 
 // LobbyCreatePageData defines all non-static data for the lobby create page.
 type LobbyCreatePageData struct {
-	*BasePageConfig
+	*AuthenticatedBasePageData
 	*game.SettingBounds
 	Translation       translations.Translation
 	Locale            string
@@ -82,16 +82,16 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 
 	//Prevent resetting the form, since that would be annoying as hell.
 	pageData := LobbyCreatePageData{
-		BasePageConfig:    currentBasePageConfig,
-		SettingBounds:     game.LobbySettingBounds,
-		Languages:         game.SupportedLanguages,
-		Public:            r.Form.Get("public"),
-		DrawingTime:       r.Form.Get("drawing_time"),
-		Rounds:            r.Form.Get("rounds"),
-		MaxPlayers:        r.Form.Get("max_players"),
-		CustomWords:       r.Form.Get("custom_words"),
-		CustomWordsChance: r.Form.Get("custom_words_chance"),
-		Language:          r.Form.Get("language"),
+		AuthenticatedBasePageData: NewAuthenticatedBasePageData(api.RootPath, &u),
+		SettingBounds:             game.LobbySettingBounds,
+		Languages:                 game.SupportedLanguages,
+		Public:                    r.Form.Get("public"),
+		DrawingTime:               r.Form.Get("drawing_time"),
+		Rounds:                    r.Form.Get("rounds"),
+		MaxPlayers:                r.Form.Get("max_players"),
+		CustomWords:               r.Form.Get("custom_words"),
+		CustomWordsChance:         r.Form.Get("custom_words_chance"),
+		Language:                  r.Form.Get("language"),
 	}
 
 	if languageInvalid != nil {
@@ -139,7 +139,10 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 
 	//We only add the lobby if we could do all necessary pre-steps successfully.
 	state.AddLobby(lobby)
-	// TODO: _ = h.db.AddLobby(&u, lobby.LobbyID)
+	addLobbyErr := h.db.AddLobby(&u, lobby.LobbyID)
+	if addLobbyErr != nil {
+		log.Println(addLobbyErr.Error())
+	}
 
 	log.Printf("%v (%v) created lobby %v", u.Name, u.Id, lobby.LobbyID)
 

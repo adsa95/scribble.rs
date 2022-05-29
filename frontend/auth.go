@@ -4,6 +4,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/api"
 	"github.com/scribble-rs/scribble.rs/auth"
 	"github.com/scribble-rs/scribble.rs/config"
+	"github.com/scribble-rs/scribble.rs/database"
 	"github.com/scribble-rs/scribble.rs/translations"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
@@ -11,9 +12,24 @@ import (
 )
 
 type AuthHandler struct {
+	db           *database.DB
 	authService  *auth.Service
 	twitchClient *twitch.Client
 	generateUrl  config.UrlGeneratorFunc
+}
+
+type AuthenticatedBasePageData struct {
+	*BasePageConfig
+	User *auth.User
+}
+
+func NewAuthenticatedBasePageData(rootPath string, user *auth.User) *AuthenticatedBasePageData {
+	return &AuthenticatedBasePageData{
+		BasePageConfig: &BasePageConfig{
+			RootPath: rootPath,
+		},
+		User: user,
+	}
 }
 
 type loginPageData struct {
@@ -82,13 +98,18 @@ func (h *AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) 
 		Name: twitchUser.DisplayName,
 	}
 
+	upsertError := h.db.UpsertUser(&user)
+	if upsertError != nil {
+		log.Printf("[ERR][DB] Failed upserting user: %v", upsertError)
+	}
+
 	cookieError := h.authService.SetUserCookie(w, &user)
 	if cookieError != nil {
 		http.Error(w, cookieError.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Successfully logged in user %v (%v)", user.Name, user.Id)
+	log.Printf("[INFO][AUTH] Successfully logged in user %v (%v)", user.Name, user.Id)
 
 	redirectPath := "/"
 	if r.URL.Query().Has("state") {

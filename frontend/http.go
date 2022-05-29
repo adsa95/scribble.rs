@@ -53,6 +53,7 @@ type BasePageConfig struct {
 // SetupRoutes registers the official webclient endpoints with the router.
 func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *auth.Service, t *twitch.Client, db *database.DB) {
 	authHandler := &AuthHandler{
+		db:           db,
 		authService:  a,
 		twitchClient: t,
 		generateUrl:  generateUrl,
@@ -68,12 +69,18 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 		generateUrl: generateUrl,
 	}
 
-	r.HandlerFunc("GET", "/", requireUserOrRedirect(a, createHandler.homePage))
+	joinHandler := &JoinHandler{
+		db: db,
+	}
+
+	r.HandlerFunc("GET", "/", a.CheckUser(joinHandler.ssrJoinForm))
+	r.HandlerFunc("GET", "/join/:username", joinHandler.join)
 
 	r.HandlerFunc("GET", "/login", authHandler.ssrLogin)
 	r.HandlerFunc("GET", "/logout", authHandler.ssrLogout)
 	r.HandlerFunc("GET", "/login_twitch_callback", authHandler.ssrTwitchCallback)
 
+	r.HandlerFunc("GET", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateForm))
 	r.HandlerFunc("POST", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireUserOrRedirect(a, ssrEnterLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", ssrObserveLobby)

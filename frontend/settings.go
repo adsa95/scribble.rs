@@ -19,7 +19,7 @@ type SettingsHandler struct {
 }
 
 type settingsPageData struct {
-	*BasePageConfig
+	*AuthenticatedBasePageData
 	Translation   translations.Translation
 	Locale        string
 	Banned        *[]auth.User
@@ -45,14 +45,12 @@ func (h *SettingsHandler) ssrSettings(w http.ResponseWriter, r *http.Request, u 
 	translation, locale := determineTranslation(r)
 
 	pageData := settingsPageData{
-		BasePageConfig: &BasePageConfig{
-			RootPath: api.RootPath,
-		},
-		Translation:   translation,
-		Locale:        locale,
-		Banned:        banned,
-		Mods:          mods,
-		SyncTwitchUrl: syncUrl,
+		AuthenticatedBasePageData: NewAuthenticatedBasePageData(api.RootPath, &u),
+		Translation:               translation,
+		Locale:                    locale,
+		Banned:                    banned,
+		Mods:                      mods,
+		SyncTwitchUrl:             syncUrl,
 	}
 
 	templateErr := pageTemplates.ExecuteTemplate(w, "settings-page", pageData)

@@ -44,15 +44,28 @@
         <img id="logo" src="{{.RootPath}}/resources/logo.svg">
 
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex" style="justify-content: space-between;">
                 <ul class="nav nav-tabs card-header-tabs">
                     <li class="nav-item">
-                        <a href="/" class="nav-link active">{{.Translation.Get "create-lobby"}}</a>
+                        <a href="/" class="nav-link">Join user</a>
                     </li>
                     <li class="nav-item">
-                        <a href="/settings" class="nav-link">Account settings</a>
+                        <a href="/lobbies" class="nav-link active">{{.Translation.Get "create-lobby"}}</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/settings" class="nav-link">Mods & Bans</a>
                     </li>
                 </ul>
+                {{ if .User }}
+                    <div class="dropdown" style="align-self: center">
+                        <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">{{.User.Name}}</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a href="/logout" class="dropdown-item">Logout</a>
+                            </li>
+                        </ul>
+                    </div>
+                {{ end }}
             </div>
             <div class="card-body">
                 {{if .Errors}}
@@ -125,6 +138,8 @@
             </div>
         </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
 </body>
 </html>
 {{end}}
