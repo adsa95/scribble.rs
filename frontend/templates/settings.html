@@ -74,6 +74,9 @@
                         <div class="card">
                             <div class="card-header">My moderators</div>
                             <ul class="list-group list-group-flush">
+                                {{if not (len .Mods)}}
+                                    <li class="list-group-item">No moderators</li>
+                                {{end}}
                                 {{range .Mods}}
                                     <li class="list-group-item">{{.Name}} (ID: {{.Id}})</li>
                                 {{end}}
@@ -84,6 +87,9 @@
                         <div class="card">
                             <div class="card-header">My banned users</div>
                             <ul class="list-group list-group-flush">
+                                {{if not (len .Banned)}}
+                                    <li class="list-group-item">No banned users</li>
+                                {{end}}
                                 {{range .Banned}}
                                     <li class="list-group-item">{{.Name}} (ID: {{.Id}})</li>
                                 {{end}}
