@@ -8,6 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {{template "non-static-css-decl" .}}
     <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/base.css" />
+    <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/login.css" />
     <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/lobby_create.css" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
 
@@ -91,7 +92,10 @@
                     </div>
                 </div>
                 <div class="d-grid col-6 mx-auto">
-                    <a class="btn btn-primary" href="{{.SyncTwitchUrl}}">Update from Twitch</a>
+                    <a class="twitch-login-button" href="{{.SyncTwitchUrl}}">
+                        <img src="{{.RootPath}}/resources/TwitchGlitchWhite.svg">
+                        <span>Sync from Twitch</span>
+                    </a>
                 </div>
             </div>
         </div>
