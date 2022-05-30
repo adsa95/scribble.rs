@@ -42,25 +42,25 @@ type Client struct {
 	RedirectURI  string
 }
 
-func (c Client) GetAuthURI(state *string, scopes *[]string) string {
+func (c Client) GetAuthURI(redirectUri string, state string, scopes *[]string) string {
 	params := url.Values{}
 	params.Add("client_id", c.ClientId)
-	params.Add("redirect_uri", c.RedirectURI)
+	params.Add("redirect_uri", redirectUri)
 	params.Add("response_type", "code")
 
 	if scopes != nil && len(*scopes) > 0 {
 		params.Add("scope", strings.Join(*scopes, ","))
 	}
 
-	if state != nil {
-		params.Add("state", *state)
+	if state != "" {
+		params.Add("state", state)
 	}
 
 	return "https://id.twitch.tv/oauth2/authorize?" + params.Encode()
 }
 
 func (c Client) GetUserFromCode(code string) (*User, *TokenSet, error) {
-	tokens, tokenError := c.getTokenSetFromCode(code)
+	tokens, tokenError := c.GetTokenSetFromCode(code)
 	if tokenError != nil {
 		return nil, nil, tokenError
 	}
@@ -219,7 +219,7 @@ func (c Client) GetModerators(tokens *TokenSet, broadcasterId string, cursor str
 	return &result, nil
 }
 
-func (c Client) getTokenSetFromCode(code string) (*TokenSet, error) {
+func (c Client) GetTokenSetFromCode(code string) (*TokenSet, error) {
 	params := url.Values{}
 	params.Set("client_id", c.ClientId)
 	params.Set("client_secret", c.ClientSecret)

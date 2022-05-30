@@ -4,6 +4,8 @@ import (
 	"embed"
 	"github.com/julienschmidt/httprouter"
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/config"
+	"github.com/scribble-rs/scribble.rs/database"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"html/template"
 	"net/http"
@@ -49,21 +51,42 @@ type BasePageConfig struct {
 }
 
 // SetupRoutes registers the official webclient endpoints with the router.
-func SetupRoutes(r *httprouter.Router, a auth.Service, t twitch.Client) {
-	authHandler := AuthHandler{
+func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *auth.Service, t *twitch.Client, db *database.DB) {
+	authHandler := &AuthHandler{
+		db:           db,
 		authService:  a,
 		twitchClient: t,
+		generateUrl:  generateUrl,
 	}
 
-	r.HandlerFunc("GET", "/", requireUserOrRedirect(a, homePage))
+	createHandler := &CreateHandler{
+		db: db,
+	}
+
+	settingsHandler := &SettingsHandler{
+		db:          db,
+		twitch:      t,
+		generateUrl: generateUrl,
+	}
+
+	joinHandler := &JoinHandler{
+		db: db,
+	}
+
+	r.HandlerFunc("GET", "/", a.CheckUser(joinHandler.ssrJoinForm))
+	r.HandlerFunc("GET", "/join/:username", joinHandler.join)
 
 	r.HandlerFunc("GET", "/login", authHandler.ssrLogin)
 	r.HandlerFunc("GET", "/logout", authHandler.ssrLogout)
 	r.HandlerFunc("GET", "/login_twitch_callback", authHandler.ssrTwitchCallback)
 
-	r.HandlerFunc("POST", "/lobbies", requireUserOrRedirect(a, ssrCreateLobby))
+	r.HandlerFunc("GET", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateForm))
+	r.HandlerFunc("POST", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireUserOrRedirect(a, ssrEnterLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", ssrObserveLobby)
+
+	r.HandlerFunc("GET", "/settings", requireUserOrRedirect(a, settingsHandler.ssrSettings))
+	r.HandlerFunc("GET", "/settings_twitch_callback", requireUserOrRedirect(a, settingsHandler.ssrTwitchCallback))
 
 	r.Handler("GET", "/resources/*path", http.StripPrefix(api.RootPath, http.FileServer(http.FS(frontendResourcesFS))))
 }
@@ -90,7 +113,11 @@ func userFacingError(w http.ResponseWriter, errorMessage string) {
 	}
 }
 
-func requireUserOrRedirect(a auth.Service, h func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
+func generalUserFacingError(w http.ResponseWriter) {
+	userFacingError(w, "Something went wrong")
+}
+
+func requireUserOrRedirect(a *auth.Service, h func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
 	return a.RequireUser(h, loginPageRedirect)
 }
 

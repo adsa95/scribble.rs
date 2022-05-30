@@ -3,6 +3,8 @@ package frontend
 import (
 	"github.com/scribble-rs/scribble.rs/api"
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/config"
+	"github.com/scribble-rs/scribble.rs/database"
 	"github.com/scribble-rs/scribble.rs/translations"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
@@ -10,8 +12,24 @@ import (
 )
 
 type AuthHandler struct {
-	authService  auth.Service
-	twitchClient twitch.Client
+	db           *database.DB
+	authService  *auth.Service
+	twitchClient *twitch.Client
+	generateUrl  config.UrlGeneratorFunc
+}
+
+type AuthenticatedBasePageData struct {
+	*BasePageConfig
+	User *auth.User
+}
+
+func NewAuthenticatedBasePageData(rootPath string, user *auth.User) *AuthenticatedBasePageData {
+	return &AuthenticatedBasePageData{
+		BasePageConfig: &BasePageConfig{
+			RootPath: rootPath,
+		},
+		User: user,
+	}
 }
 
 type loginPageData struct {
@@ -21,18 +39,17 @@ type loginPageData struct {
 	TwitchLoginURI string
 }
 
-func (h AuthHandler) ssrLogin(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ssrLogin(w http.ResponseWriter, r *http.Request) {
 	if h.authService.IsAuthenticated(r) {
 		h.authService.RemoveUserCookie(w)
 	}
 
-	var intended *string = nil
+	intended := ""
 	if r.URL.Query().Has("intended") {
-		s := r.URL.Query().Get("intended")
-		intended = &s
+		intended = r.URL.Query().Get("intended")
 	}
 
-	var authURI = h.twitchClient.GetAuthURI(intended, nil)
+	var authURI = h.twitchClient.GetAuthURI(h.generateUrl("/login_twitch_callback"), intended, nil)
 
 	translation, locale := determineTranslation(r)
 	templateError := pageTemplates.ExecuteTemplate(w, "login-page", &loginPageData{
@@ -54,7 +71,7 @@ type logoutPageData struct {
 	Locale      string
 }
 
-func (h AuthHandler) ssrLogout(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ssrLogout(w http.ResponseWriter, r *http.Request) {
 	_ = h.authService.RemoveUserCookie(w)
 
 	pageTemplates.ExecuteTemplate(w, "logged-out", &logoutPageData{
@@ -64,7 +81,7 @@ func (h AuthHandler) ssrLogout(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) {
 	if !r.URL.Query().Has("code") {
 		userFacingError(w, "No Twitch Code present in auth callback")
 		return
@@ -77,8 +94,13 @@ func (h AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.User{
-		Id:         twitchUser.Id,
-		TwitchName: twitchUser.DisplayName,
+		Id:   twitchUser.Id,
+		Name: twitchUser.DisplayName,
+	}
+
+	upsertError := h.db.UpsertUser(&user)
+	if upsertError != nil {
+		log.Printf("[ERR][DB] Failed upserting user: %v", upsertError)
 	}
 
 	cookieError := h.authService.SetUserCookie(w, &user)
@@ -87,7 +109,7 @@ func (h AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Successfully logged in user %v (%v)", user.TwitchName, user.Id)
+	log.Printf("[INFO][AUTH] Successfully logged in user %v (%v)", user.Name, user.Id)
 
 	redirectPath := "/"
 	if r.URL.Query().Has("state") {

@@ -1,0 +1,103 @@
+{{define "settings-page"}}
+<!DOCTYPE html>
+<html lang="{{.Locale}}">
+
+<head>
+    <title>Scribble.rs</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{template "non-static-css-decl" .}}
+    <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/base.css" />
+    <link rel="stylesheet" type="text/css" href="{{.RootPath}}/resources/lobby_create.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
+
+    {{template "favicon-decl" .}}
+</head>
+
+<body>
+    <style>
+        body {
+            background-color: #badeb8;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('/resources/background.png');
+            background-size: 400px 400px;
+            background-repeat: repeat;
+            opacity: 0.2;
+            z-index: -1;
+        }
+
+        .content {
+            max-width: 1000px;
+            margin: auto;
+        }
+    </style>
+
+    <div class="content">
+        <img id="logo" src="{{.RootPath}}/resources/logo.svg">
+
+        <div class="card">
+            <div class="card-header d-flex" style="justify-content: space-between;">
+                <ul class="nav nav-tabs card-header-tabs">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link">Join user</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/lobbies" class="nav-link">{{.Translation.Get "create-lobby"}}</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/settings" class="nav-link active">Mods & Bans</a>
+                    </li>
+                </ul>
+                {{ if .User }}
+                    <div class="dropdown" style="align-self: center">
+                        <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">{{.User.Name}}</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a href="/logout" class="dropdown-item">Logout</a>
+                            </li>
+                        </ul>
+                    </div>
+                {{ end }}
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">My moderators</div>
+                            <ul class="list-group list-group-flush">
+                                {{range .Mods}}
+                                    <li class="list-group-item">{{.Name}} (ID: {{.Id}})</li>
+                                {{end}}
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">My banned users</div>
+                            <ul class="list-group list-group-flush">
+                                {{range .Banned}}
+                                    <li class="list-group-item">{{.Name}} (ID: {{.Id}})</li>
+                                {{end}}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-grid col-6 mx-auto">
+                    <a class="btn btn-primary" href="{{.SyncTwitchUrl}}">Update from Twitch</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
+</body>
+</html>
+{{end}}

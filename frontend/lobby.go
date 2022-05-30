@@ -86,7 +86,7 @@ func ssrObserveLobby(w http.ResponseWriter, r *http.Request) {
 func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	lobby, err := api.GetLobby(r)
 	if err != nil {
-		userFacingError(w, err.Error())
+		generalUserFacingError(w)
 		return
 	}
 
@@ -114,8 +114,8 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 				return
 			}
 
-			if lobby.HasBeenKicked(&u) {
-				userFacingError(w, "You've been kicked from this lobby")
+			if lobby.HasBeenKicked(&u) || lobby.IsBanned(&u) {
+				userFacingError(w, "You've been banned from this lobby")
 				return
 			}
 
