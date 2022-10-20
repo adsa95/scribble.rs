@@ -370,8 +370,8 @@ func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 		return
 	}
 
-	//Only lobby mods can kick
-	if !lobby.IsMod(player.user) {
+	//Only lobby creator or mods can kick
+	if player.ID != lobby.creator.ID && !lobby.IsMod(player.user) {
 		return
 	}
 
