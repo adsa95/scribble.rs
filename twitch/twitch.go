@@ -19,6 +19,20 @@ type TokenSet struct {
 	Scopes               []string
 }
 
+func (t *TokenSet) HasScope(scope string) bool {
+	if len(t.Scopes) == 0 {
+		return false
+	}
+
+	for _, s := range t.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+
+	return false
+}
+
 type User struct {
 	Id              string `json:"id"`
 	Login           string `json:"login"`
@@ -42,6 +56,15 @@ type Client struct {
 	RedirectURI  string
 }
 
+type HttpError struct {
+	StatusCode int
+	Status     string
+}
+
+func (r *HttpError) Error() string {
+	return fmt.Sprintf("status %d: err %s", r.StatusCode, r.Status)
+}
+
 func (c Client) GetAuthURI(redirectUri string, state string, scopes *[]string) string {
 	params := url.Values{}
 	params.Add("client_id", c.ClientId)
@@ -49,7 +72,7 @@ func (c Client) GetAuthURI(redirectUri string, state string, scopes *[]string) s
 	params.Add("response_type", "code")
 
 	if scopes != nil && len(*scopes) > 0 {
-		params.Add("scope", strings.Join(*scopes, ","))
+		params.Add("scope", strings.Join(*scopes, " "))
 	}
 
 	if state != "" {
@@ -172,6 +195,35 @@ type GetModeratorsResult struct {
 	} `json:"pagination"`
 }
 
+type SubscriptionEntry struct {
+	BroadcasterId    string `json:"broadcaster_id"`
+	BroadcasterLogin string `json:"broadcaster_login"`
+	BroadcasterName  string `json:"broadcaster_name"`
+	GifterId         string `json:"gifter_id"`
+	GifterLogin      string `json:"gifter_login"`
+	GifterName       string `json:"gifter_name"`
+	IsGift           bool   `json:"is_gift"`
+	Tier             string `json:"tier"`
+}
+
+type CheckUserSubscriptionResult struct {
+	Data []SubscriptionEntry `json:"data"`
+}
+
+type FollowEntry struct {
+	FromId     string `json:"from_id"`
+	FromLogin  string `json:"from_login"`
+	FromName   string `json:"from_name"`
+	ToId       string `json:"to_id"`
+	ToLogin    string `json:"to_login"`
+	ToName     string `json:"to_name"`
+	FollowedAt string `json:"followed_at"`
+}
+
+type UserFollowsResult struct {
+	Data []FollowEntry `json:"data"`
+}
+
 func (c Client) GetAllModerators(tokens *TokenSet, broadcasterId string) ([]ModeratorEntry, error) {
 	res := make([]ModeratorEntry, 0)
 	cursor := ""
@@ -219,6 +271,83 @@ func (c Client) GetModerators(tokens *TokenSet, broadcasterId string, cursor str
 	return &result, nil
 }
 
+func (c Client) CheckUserSubscription(tokens *TokenSet, userId string, broadcasterId string) (*SubscriptionEntry, error) {
+	params := url.Values{}
+	params.Set("user_id", userId)
+	params.Set("broadcaster_id", broadcasterId)
+
+	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/subscriptions/user"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
+	if newRequestError != nil {
+		return nil, newRequestError
+	}
+
+	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	var result CheckUserSubscriptionResult
+	err := c.doAndParseJson(request, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return &result.Data[0], nil
+}
+
+func (c *Client) CheckUserFollows(tokens *TokenSet, userId string, broadcasterId string) (*FollowEntry, error) {
+	params := url.Values{}
+	params.Set("from_id", userId)
+	params.Set("to_id", broadcasterId)
+
+	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/users/follows?"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
+	if newRequestError != nil {
+		return nil, newRequestError
+	}
+
+	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	var result UserFollowsResult
+	err := c.doAndParseJson(request, &result)
+	if err != nil {
+		// No follow results in 404 error, not empty ok response
+		httpError, ok := err.(*HttpError)
+		if ok && httpError.StatusCode == 404 {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	if len(result.Data) == 0 {
+		return nil, nil
+	}
+
+	return &result.Data[0], nil
+}
+
+func (c *Client) CheckUserBanned(tokens *TokenSet, userId string, broadcasterId string) (*BannedUserEntry, error) {
+	params := url.Values{}
+	params.Set("user_id", userId)
+	params.Set("broadcaster_id", broadcasterId)
+
+	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/moderation/banned?"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
+	if newRequestError != nil {
+		return nil, newRequestError
+	}
+
+	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	var result GetBannedUsersResult
+	err := c.doAndParseJson(request, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result.Data) == 0 {
+		return nil, nil
+	}
+
+	return &result.Data[0], nil
+}
+
 func (c Client) GetTokenSetFromCode(code string) (*TokenSet, error) {
 	params := url.Values{}
 	params.Set("client_id", c.ClientId)
@@ -257,7 +386,7 @@ func (c Client) GetTokenSetFromCode(code string) (*TokenSet, error) {
 		RefreshToken:         result.RefreshToken,
 		FetchedAt:            now,
 		AccessTokenExpiresAt: expiresAt,
-		Scopes:               []string{},
+		Scopes:               result.Scope,
 	}
 
 	return &set, nil
@@ -280,7 +409,10 @@ func (c Client) doAndParseJson(r *http.Request, result any) error {
 	}
 
 	if response.StatusCode != 200 {
-		return fmt.Errorf("%v", response.Status)
+		return &HttpError{
+			StatusCode: response.StatusCode,
+			Status:     response.Status,
+		}
 	}
 
 	decodeError := json.Unmarshal(bodyString, result)

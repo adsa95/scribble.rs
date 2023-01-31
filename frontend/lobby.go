@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/game"
 	"log"
 	"net/http"
 	"strconv"
@@ -11,6 +12,10 @@ import (
 	"github.com/scribble-rs/scribble.rs/translations"
 	"golang.org/x/text/language"
 )
+
+type LobbyHandler struct {
+	gameService *game.Service
+}
 
 type lobbyPageData struct {
 	*BasePageConfig
@@ -30,7 +35,7 @@ type robotPageData struct {
 	*api.LobbyData
 }
 
-func ssrObserveLobby(w http.ResponseWriter, r *http.Request) {
+func (h *LobbyHandler) ssrObserveLobby(w http.ResponseWriter, r *http.Request) {
 	lobby, err := api.GetLobby(r)
 	if err != nil {
 		userFacingError(w, err.Error())
@@ -83,7 +88,7 @@ func ssrObserveLobby(w http.ResponseWriter, r *http.Request) {
 }
 
 // ssrEnterLobby opens a lobby, either opening it directly or asking for a lobby.
-func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
+func (h *LobbyHandler) ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 	lobby, err := api.GetLobby(r)
 	if err != nil {
 		generalUserFacingError(w)
@@ -109,13 +114,14 @@ func ssrEnterLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
 		player := lobby.GetPlayer(&u)
 
 		if player == nil {
-			if !lobby.HasFreePlayerSlot() {
-				userFacingError(w, "Sorry, but the lobby is full.")
+			canJoin, reason, err := h.gameService.CanJoin(&u, lobby)
+			if err != nil {
+				userFacingError(w, "An error occurred")
 				return
 			}
 
-			if lobby.HasBeenKicked(&u) || lobby.IsBanned(&u) {
-				userFacingError(w, "You've been banned from this lobby")
+			if !canJoin {
+				userFacingError(w, "You're not allowed to join: "+reason)
 				return
 			}
 

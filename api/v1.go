@@ -35,7 +35,8 @@ type LobbyEntry struct {
 }
 
 type Handler struct {
-	Db *database.DB
+	Db          *database.DB
+	gameService *game.Service
 }
 
 func (h *Handler) publicLobbies(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +79,8 @@ func (h *Handler) createLobby(w http.ResponseWriter, r *http.Request, user auth.
 	customWords, customWordsInvalid := ParseCustomWords(r.Form.Get("custom_words"))
 	customWordChance, customWordChanceInvalid := ParseCustomWordsChance(r.Form.Get("custom_words_chance"))
 	publicLobby, publicLobbyInvalid := ParseBoolean("public", r.Form.Get("public"))
+	followersOnly, followersOnlyInvalid := ParseBoolean("followers_only", r.Form.Get("followers_only"))
+	subsOnly, subsOnlyInvalid := ParseBoolean("subs_only", r.Form.Get("subs_only"))
 
 	var requestErrors []string
 	if languageInvalid != nil {
@@ -101,13 +104,19 @@ func (h *Handler) createLobby(w http.ResponseWriter, r *http.Request, user auth.
 	if publicLobbyInvalid != nil {
 		requestErrors = append(requestErrors, publicLobbyInvalid.Error())
 	}
+	if followersOnlyInvalid != nil {
+		requestErrors = append(requestErrors, followersOnlyInvalid.Error())
+	}
+	if subsOnlyInvalid != nil {
+		requestErrors = append(requestErrors, subsOnlyInvalid.Error())
+	}
 
 	if len(requestErrors) != 0 {
 		http.Error(w, strings.Join(requestErrors, ";"), http.StatusBadRequest)
 		return
 	}
 
-	_, lobby, createError := game.CreateLobby(h.Db, &user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
+	_, lobby, createError := game.CreateLobby(h.Db, &user, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords, followersOnly, subsOnly)
 	if createError != nil {
 		http.Error(w, createError.Error(), http.StatusBadRequest)
 		return
@@ -138,13 +147,14 @@ func (h *Handler) enterLobbyEndpoint(w http.ResponseWriter, r *http.Request, use
 		player := lobby.GetPlayer(&user)
 
 		if player == nil {
-			if !lobby.HasFreePlayerSlot() {
-				http.Error(w, "lobby already full", http.StatusForbidden)
+			canJoin, reason, err := h.gameService.CanJoin(&user, lobby)
+			if err != nil {
+				http.Error(w, "An error occurred", http.StatusInternalServerError)
 				return
 			}
 
-			if lobby.HasBeenKicked(&user) || lobby.IsBanned(&user) {
-				http.Error(w, "you've been banned from this lobby", http.StatusForbidden)
+			if !canJoin {
+				http.Error(w, "You're not allowed to join: "+reason, http.StatusForbidden)
 				return
 			}
 

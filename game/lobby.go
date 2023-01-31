@@ -860,7 +860,7 @@ func (lobby *Lobby) triggerPlayersUpdate() {
 
 // CreateLobby creates a new lobby including the initial player (owner) and
 // optionally returns an error, if any occurred during creation.
-func CreateLobby(db *database.DB, user *auth.User, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance int, customWords []string) (*Player, *Lobby, error) {
+func CreateLobby(db *database.DB, user *auth.User, chosenLanguage string, publicLobby bool, drawingTime, rounds, maxPlayers, customWordsChance int, customWords []string, followersOnly bool, subsOnly bool) (*Player, *Lobby, error) {
 	lobby := &Lobby{
 		LobbyID: uuid.Must(uuid.NewV4()).String(),
 		EditableLobbySettings: &EditableLobbySettings{
@@ -870,11 +870,13 @@ func CreateLobby(db *database.DB, user *auth.User, chosenLanguage string, public
 			CustomWordsChance: customWordsChance,
 			Public:            publicLobby,
 		},
-		CustomWords:    customWords,
-		currentDrawing: make([]interface{}, 0),
-		State:          Unstarted,
-		db:             db,
-		mutex:          &sync.Mutex{},
+		CustomWords:       customWords,
+		currentDrawing:    make([]interface{}, 0),
+		State:             Unstarted,
+		db:                db,
+		mutex:             &sync.Mutex{},
+		RequireFollow:     followersOnly,
+		RequireSubscribed: subsOnly,
 	}
 
 	if len(customWords) > 1 {

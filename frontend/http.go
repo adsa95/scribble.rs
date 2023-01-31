@@ -6,6 +6,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/auth"
 	"github.com/scribble-rs/scribble.rs/config"
 	"github.com/scribble-rs/scribble.rs/database"
+	"github.com/scribble-rs/scribble.rs/game"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"html/template"
 	"net/http"
@@ -51,7 +52,7 @@ type BasePageConfig struct {
 }
 
 // SetupRoutes registers the official webclient endpoints with the router.
-func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *auth.Service, t *twitch.Client, db *database.DB) {
+func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *auth.Service, t *twitch.Client, db *database.DB, g *game.Service) {
 	authHandler := &AuthHandler{
 		db:           db,
 		authService:  a,
@@ -73,6 +74,16 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 		db: db,
 	}
 
+	lobbyHandler := &LobbyHandler{
+		gameService: g,
+	}
+
+	requireScopeMiddleware := RequireScopeMiddleware{
+		auth:        a,
+		twitch:      t,
+		generateUrl: generateUrl,
+	}
+
 	r.HandlerFunc("GET", "/", a.CheckUser(joinHandler.ssrJoinForm))
 	r.HandlerFunc("GET", "/join/:username", joinHandler.join)
 
@@ -80,10 +91,10 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 	r.HandlerFunc("GET", "/logout", authHandler.ssrLogout)
 	r.HandlerFunc("GET", "/login_twitch_callback", authHandler.ssrTwitchCallback)
 
-	r.HandlerFunc("GET", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateForm))
+	r.HandlerFunc("GET", "/lobbies", requireScopeMiddleware.Handler([]string{"user:read:subscriptions", "moderation:read"}, createHandler.ssrCreateForm))
 	r.HandlerFunc("POST", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateLobby))
-	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireUserOrRedirect(a, ssrEnterLobby))
-	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", ssrObserveLobby)
+	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireScopeMiddleware.Handler([]string{"user:read:subscriptions"}, lobbyHandler.ssrEnterLobby))
+	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", lobbyHandler.ssrObserveLobby)
 
 	r.HandlerFunc("GET", "/settings", requireUserOrRedirect(a, settingsHandler.ssrSettings))
 	r.HandlerFunc("GET", "/settings_twitch_callback", requireUserOrRedirect(a, settingsHandler.ssrTwitchCallback))
@@ -119,6 +130,37 @@ func generalUserFacingError(w http.ResponseWriter) {
 
 func requireUserOrRedirect(a *auth.Service, h func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
 	return a.RequireUser(h, loginPageRedirect)
+}
+
+type RequireScopeMiddleware struct {
+	auth        *auth.Service
+	twitch      *twitch.Client
+	generateUrl config.UrlGeneratorFunc
+}
+
+func (m *RequireScopeMiddleware) Handler(scopes []string, nextHandler func(w http.ResponseWriter, r *http.Request, user auth.User)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, err := m.auth.GetUser(r)
+		if err != nil {
+			m.redirectAuth(w, r, scopes)
+			return
+		}
+
+		for _, requiredScope := range scopes {
+			if !user.Tokens.HasScope(requiredScope) {
+				combinedScopes := append(user.Tokens.Scopes, scopes...)
+				m.redirectAuth(w, r, combinedScopes)
+				return
+			}
+		}
+
+		nextHandler(w, r, *user)
+	}
+}
+
+func (m *RequireScopeMiddleware) redirectAuth(w http.ResponseWriter, r *http.Request, scopes []string) {
+	authUrl := m.twitch.GetAuthURI(m.generateUrl("/login_twitch_callback"), strings.TrimPrefix(r.URL.String(), api.RootPath), &scopes)
+	http.Redirect(w, r, authUrl, http.StatusFound)
 }
 
 func loginPageRedirect(w http.ResponseWriter, r *http.Request, e error) {

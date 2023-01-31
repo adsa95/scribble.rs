@@ -42,6 +42,8 @@ func initEnglishTranslation() Translation {
 	translation.put("rounds-setting", "Rounds")
 	translation.put("max-players-setting", "Maximum Players")
 	translation.put("public-lobby-setting", "Public Lobby")
+	translation.put("followers-only-setting", "Users must follow")
+	translation.put("subs-only-setting", "Users must subscribe")
 	translation.put("custom-words", "Custom Words")
 	translation.put("custom-words-info", "Enter your additional words, separating them by commas")
 	translation.put("custom-words-chance-setting", "Custom Words Chance")

@@ -128,6 +128,16 @@
                                    {{if eq .Public "true"}}checked{{end}} />
                             <label for="input-public-lobby" class="form-check-label">{{.Translation.Get "public-lobby-setting"}}</label>
                         </div>
+                        <div class="col">
+                            <input id="input-followers-only" class="form-check-input" type="checkbox" name="followers_only" value="true"
+                                   {{if eq .Public "true"}}checked{{end}} />
+                            <label for="input-followers-only" class="form-check-label">{{.Translation.Get "followers-only-setting"}}</label>
+                        </div>
+                        <div class="col">
+                            <input id="input-subs-only" class="form-check-input" type="checkbox" name="subs_only" value="true"
+                                   {{if eq .Public "true"}}checked{{end}} />
+                            <label for="input-subs-only" class="form-check-label">{{.Translation.Get "subs-only-setting"}}</label>
+                        </div>
                     </div>
                     <div class="d-grid col-6 mx-auto">
                         <button type="submit" class="btn btn-primary">

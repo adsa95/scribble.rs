@@ -49,7 +49,7 @@ func (h *AuthHandler) ssrLogin(w http.ResponseWriter, r *http.Request) {
 		intended = r.URL.Query().Get("intended")
 	}
 
-	var authURI = h.twitchClient.GetAuthURI(h.generateUrl("/login_twitch_callback"), intended, nil)
+	var authURI = h.twitchClient.GetAuthURI(h.generateUrl("/login_twitch_callback"), intended, &[]string{"user:read:subscriptions"})
 
 	translation, locale := determineTranslation(r)
 	templateError := pageTemplates.ExecuteTemplate(w, "login-page", &loginPageData{
@@ -87,15 +87,16 @@ func (h *AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	twitchUser, _, verificationError := h.twitchClient.GetUserFromCode(r.URL.Query().Get("code"))
+	twitchUser, userTokens, verificationError := h.twitchClient.GetUserFromCode(r.URL.Query().Get("code"))
 	if verificationError != nil {
 		userFacingError(w, "Could not get user from Twitch Auth Code")
 		return
 	}
 
 	user := auth.User{
-		Id:   twitchUser.Id,
-		Name: twitchUser.DisplayName,
+		Id:     twitchUser.Id,
+		Name:   twitchUser.DisplayName,
+		Tokens: *userTokens,
 	}
 
 	upsertError := h.db.UpsertUser(&user)

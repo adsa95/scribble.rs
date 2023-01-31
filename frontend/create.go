@@ -2,7 +2,9 @@ package frontend
 
 import (
 	"github.com/scribble-rs/scribble.rs/auth"
+	"github.com/scribble-rs/scribble.rs/config"
 	"github.com/scribble-rs/scribble.rs/database"
+	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
 	"net/http"
 
@@ -15,7 +17,9 @@ import (
 //This file contains the API for the official web client.
 
 type CreateHandler struct {
-	db *database.DB
+	db          *database.DB
+	twitch      *twitch.Client
+	generateUrl config.UrlGeneratorFunc
 }
 
 // ssrCreateForm servers the default page for scribble.rs, which is the page to
@@ -61,11 +65,19 @@ type LobbyCreatePageData struct {
 	CustomWords       string
 	CustomWordsChance string
 	Language          string
+	FollowersOnly     string
+	SubsOnly          string
 }
 
 // ssrCreateLobby allows creating a lobby, optionally returning errors that
 // occurred during creation.
 func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
+	if !u.Tokens.HasScope("moderation:read") {
+		authUrl := h.twitch.GetAuthURI(h.generateUrl("/twitch_login_redirect"), r.URL.Path, &[]string{"user:read:subscriptions", "moderation:read"})
+		http.Redirect(w, r, authUrl, http.StatusFound)
+		return
+	}
+
 	formParseError := r.ParseForm()
 	if formParseError != nil {
 		http.Error(w, formParseError.Error(), http.StatusBadRequest)
@@ -79,6 +91,8 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 	customWords, customWordsInvalid := api.ParseCustomWords(r.Form.Get("custom_words"))
 	customWordChance, customWordChanceInvalid := api.ParseCustomWordsChance(r.Form.Get("custom_words_chance"))
 	publicLobby, publicLobbyInvalid := api.ParseBoolean("public", r.Form.Get("public"))
+	followersOnly, followersOnlyInvalid := api.ParseBoolean("followers_only", r.Form.Get("followers_only"))
+	subsOnly, subsOnlyInvalid := api.ParseBoolean("subs_only", r.Form.Get("subs_only"))
 
 	//Prevent resetting the form, since that would be annoying as hell.
 	pageData := LobbyCreatePageData{
@@ -92,6 +106,8 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 		CustomWords:               r.Form.Get("custom_words"),
 		CustomWordsChance:         r.Form.Get("custom_words_chance"),
 		Language:                  r.Form.Get("language"),
+		FollowersOnly:             r.Form.Get("followers_only"),
+		SubsOnly:                  r.Form.Get("subs_only"),
 	}
 
 	if languageInvalid != nil {
@@ -115,6 +131,12 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 	if publicLobbyInvalid != nil {
 		pageData.Errors = append(pageData.Errors, publicLobbyInvalid.Error())
 	}
+	if followersOnlyInvalid != nil {
+		pageData.Errors = append(pageData.Errors, followersOnlyInvalid.Error())
+	}
+	if subsOnlyInvalid != nil {
+		pageData.Errors = append(pageData.Errors, subsOnlyInvalid.Error())
+	}
 
 	translation, locale := determineTranslation(r)
 	pageData.Translation = translation
@@ -128,7 +150,7 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 
-	_, lobby, createError := game.CreateLobby(h.db, &u, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords)
+	_, lobby, createError := game.CreateLobby(h.db, &u, language, publicLobby, drawingTime, rounds, maxPlayers, customWordChance, customWords, followersOnly, subsOnly)
 	if createError != nil {
 		pageData.Errors = append(pageData.Errors, createError.Error())
 		_ = pageTemplates.ExecuteTemplate(w, "lobby-create-page", pageData)

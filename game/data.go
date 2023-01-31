@@ -27,6 +27,9 @@ type Lobby struct {
 	// screw with the score calculation of the current turn.
 	DrawingTimeNew int
 
+	RequireFollow     bool
+	RequireSubscribed bool
+
 	CustomWords []string
 	words       []string
 

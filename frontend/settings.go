@@ -22,8 +22,8 @@ type settingsPageData struct {
 	*AuthenticatedBasePageData
 	Translation   translations.Translation
 	Locale        string
-	Banned        *[]auth.User
-	Mods          *[]auth.User
+	Banned        *[]database.UserDigest
+	Mods          *[]database.UserDigest
 	SyncTwitchUrl string
 }
 

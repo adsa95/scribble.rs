@@ -23,6 +23,11 @@ type DB struct {
 	Executor *sqlx.DB
 }
 
+type UserDigest struct {
+	Id   string
+	Name string
+}
+
 func FromDatabaseUrl(databaseUrl string) (*DB, error) {
 	db, err := sqlx.Open(Type, databaseUrl)
 	if err != nil {
@@ -49,7 +54,7 @@ func (d *DB) AddLobby(user *auth.User, lobbyId string) error {
 	return err
 }
 
-func (d *DB) GetModsForChannel(channelId string) (*[]auth.User, error) {
+func (d *DB) GetModsForChannel(channelId string) (*[]UserDigest, error) {
 	var rows []struct {
 		ModId   string `db:"mod_id"`
 		ModName string `db:"mod_name"`
@@ -60,9 +65,9 @@ func (d *DB) GetModsForChannel(channelId string) (*[]auth.User, error) {
 		return nil, err
 	}
 
-	ids := make([]auth.User, len(rows))
+	ids := make([]UserDigest, len(rows))
 	for i, row := range rows {
-		ids[i] = auth.User{
+		ids[i] = UserDigest{
 			Id:   row.ModId,
 			Name: row.ModName,
 		}
@@ -100,7 +105,7 @@ func (d *DB) SetModsForChannel(channelId string, mods []twitch.ModeratorEntry) e
 	return nil
 }
 
-func (d *DB) GetBannedForChannel(channelId string) (*[]auth.User, error) {
+func (d *DB) GetBannedForChannel(channelId string) (*[]UserDigest, error) {
 	var rows []struct {
 		BannedId   string `db:"banned_id"`
 		BannedName string `db:"banned_name"`
@@ -111,9 +116,9 @@ func (d *DB) GetBannedForChannel(channelId string) (*[]auth.User, error) {
 		return nil, err
 	}
 
-	ids := make([]auth.User, len(rows))
+	ids := make([]UserDigest, len(rows))
 	for i, row := range rows {
-		ids[i] = auth.User{
+		ids[i] = UserDigest{
 			Id:   row.BannedId,
 			Name: row.BannedName,
 		}

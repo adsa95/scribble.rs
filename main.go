@@ -6,6 +6,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/auth"
 	config2 "github.com/scribble-rs/scribble.rs/config"
 	"github.com/scribble-rs/scribble.rs/database"
+	"github.com/scribble-rs/scribble.rs/game"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
 	"math/rand"
@@ -95,12 +96,16 @@ func main() {
 		RedirectURI:  config.TwitchRedirectURI,
 	}
 
+	gameService := &game.Service{
+		Twitch: twitchClient,
+	}
+
 	db, _ := database.FromDatabaseUrl(config.DatabaseUrl)
 
 	router := httprouter.New()
 
 	api.SetupRoutes(router, authService, db)
-	frontend.SetupRoutes(config.GenerateUrl, router, authService, twitchClient, db)
+	frontend.SetupRoutes(config.GenerateUrl, router, authService, twitchClient, db, gameService)
 	state.LaunchCleanupRoutine()
 
 	signalChan := make(chan os.Signal, 1)
