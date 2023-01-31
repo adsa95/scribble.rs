@@ -419,21 +419,6 @@ func (lobby Lobby) HasBeenKicked(user *auth.User) bool {
 	return false
 }
 
-func (lobby *Lobby) IsBanned(user *auth.User) bool {
-	banned, err := lobby.db.GetBannedForChannel(lobby.creator.user.Id)
-	if err != nil {
-		return false
-	}
-
-	for _, u := range *banned {
-		if u.Id == user.Id {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (lobby *Lobby) IsMod(user *auth.User) bool {
 	mods, err := lobby.db.GetModsForChannel(lobby.creator.user.Id)
 	if err != nil {

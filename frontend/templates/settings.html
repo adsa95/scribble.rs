@@ -83,19 +83,6 @@
                             </ul>
                         </div>
                     </div>
-                    <div class="col">
-                        <div class="card">
-                            <div class="card-header">My banned users</div>
-                            <ul class="list-group list-group-flush">
-                                {{if not (len .Banned)}}
-                                    <li class="list-group-item">No banned users</li>
-                                {{end}}
-                                {{range .Banned}}
-                                    <li class="list-group-item">{{.Name}} (ID: {{.Id}})</li>
-                                {{end}}
-                            </ul>
-                        </div>
-                    </div>
                 </div>
                 <div class="d-grid col-6 mx-auto">
                     <a class="twitch-login-button" href="{{.SyncTwitchUrl}}">

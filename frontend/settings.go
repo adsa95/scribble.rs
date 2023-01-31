@@ -22,18 +22,11 @@ type settingsPageData struct {
 	*AuthenticatedBasePageData
 	Translation   translations.Translation
 	Locale        string
-	Banned        *[]database.UserDigest
 	Mods          *[]database.UserDigest
 	SyncTwitchUrl string
 }
 
 func (h *SettingsHandler) ssrSettings(w http.ResponseWriter, r *http.Request, u auth.User) {
-	banned, err := h.db.GetBannedForChannel(u.Id)
-	if err != nil {
-		generalUserFacingError(w)
-		return
-	}
-
 	mods, err := h.db.GetModsForChannel(u.Id)
 	if err != nil {
 		generalUserFacingError(w)
@@ -48,7 +41,6 @@ func (h *SettingsHandler) ssrSettings(w http.ResponseWriter, r *http.Request, u 
 		AuthenticatedBasePageData: NewAuthenticatedBasePageData(api.RootPath, &u),
 		Translation:               translation,
 		Locale:                    locale,
-		Banned:                    banned,
 		Mods:                      mods,
 		SyncTwitchUrl:             syncUrl,
 	}
@@ -78,18 +70,6 @@ func (h *SettingsHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	user := users.Data[0]
-
-	banned, getBannedErr := h.twitch.GetAllBannedUsers(tokens, user.Id)
-	if getBannedErr != nil {
-		generalUserFacingError(w)
-		return
-	}
-
-	setBannedErr := h.db.SetBannedForChannel(user.Id, banned)
-	if setBannedErr != nil {
-		generalUserFacingError(w)
-		return
-	}
 
 	mods, getModsErr := h.twitch.GetAllModerators(tokens, user.Id)
 	if getModsErr != nil {

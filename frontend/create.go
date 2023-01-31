@@ -46,7 +46,7 @@ func createDefaultLobbyCreatePageData(user *auth.User) *LobbyCreatePageData {
 		Rounds:                    "4",
 		MaxPlayers:                "12",
 		CustomWordsChance:         "50",
-		Language:                  "english",
+		Language:                  "swedish",
 	}
 }
 
