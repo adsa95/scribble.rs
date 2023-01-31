@@ -11,28 +11,6 @@ import (
 	"time"
 )
 
-type TokenSet struct {
-	AccessToken          string
-	RefreshToken         string
-	FetchedAt            time.Time
-	AccessTokenExpiresAt time.Time
-	Scopes               []string
-}
-
-func (t *TokenSet) HasScope(scope string) bool {
-	if len(t.Scopes) == 0 {
-		return false
-	}
-
-	for _, s := range t.Scopes {
-		if s == scope {
-			return true
-		}
-	}
-
-	return false
-}
-
 type User struct {
 	Id              string `json:"id"`
 	Login           string `json:"login"`

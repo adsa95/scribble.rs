@@ -72,12 +72,6 @@ type LobbyCreatePageData struct {
 // ssrCreateLobby allows creating a lobby, optionally returning errors that
 // occurred during creation.
 func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u auth.User) {
-	if !u.Tokens.HasScope("moderation:read") {
-		authUrl := h.twitch.GetAuthURI(h.generateUrl("/twitch_login_redirect"), r.URL.Path, &[]string{"user:read:subscriptions", "moderation:read"})
-		http.Redirect(w, r, authUrl, http.StatusFound)
-		return
-	}
-
 	formParseError := r.ParseForm()
 	if formParseError != nil {
 		http.Error(w, formParseError.Error(), http.StatusBadRequest)

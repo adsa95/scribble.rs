@@ -1,12 +1,14 @@
 package game
 
 import (
+	"fmt"
 	"github.com/scribble-rs/scribble.rs/auth"
 	"github.com/scribble-rs/scribble.rs/twitch"
 )
 
 type Service struct {
 	Twitch *twitch.Client
+	Tokens twitch.TokenStore
 }
 
 func (g *Service) CanJoin(user *auth.User, lobby *Lobby) (bool, string, error) {
@@ -18,8 +20,21 @@ func (g *Service) CanJoin(user *auth.User, lobby *Lobby) (bool, string, error) {
 		return false, "kicked", nil
 	}
 
+	userTokens, err := g.Tokens.Get(user)
+	if err != nil {
+		return false, "", err
+	}
+
 	if lobby.RequireFollow {
-		followEntry, err := g.Twitch.CheckUserFollows(&user.Tokens, user.Id, lobby.Owner.ID)
+		if userTokens == nil {
+			return false, "", fmt.Errorf(
+				"no tokens for user %s (%s), can't check follow status",
+				user.Name,
+				user.Id,
+			)
+		}
+
+		followEntry, err := g.Twitch.CheckUserFollows(userTokens, user.Id, lobby.Owner.ID)
 		if err != nil {
 			return false, "", err
 		}
@@ -29,7 +44,15 @@ func (g *Service) CanJoin(user *auth.User, lobby *Lobby) (bool, string, error) {
 	}
 
 	if lobby.RequireSubscribed {
-		subEntry, err := g.Twitch.CheckUserSubscription(&user.Tokens, user.Id, lobby.Owner.ID)
+		if userTokens == nil {
+			return false, "", fmt.Errorf(
+				"no tokens for user %s (%s), can't check follow status",
+				user.Name,
+				user.Id,
+			)
+		}
+
+		subEntry, err := g.Twitch.CheckUserSubscription(userTokens, user.Id, lobby.Owner.ID)
 		if err != nil {
 			return false, "", err
 		}
@@ -38,7 +61,21 @@ func (g *Service) CanJoin(user *auth.User, lobby *Lobby) (bool, string, error) {
 		}
 	}
 
-	banEntry, err := g.Twitch.CheckUserBanned(&lobby.Owner.GetUser().Tokens, user.Id, lobby.Owner.ID)
+	owner := lobby.Owner.GetUser()
+	ownerTokens, err := g.Tokens.Get(owner)
+	if err != nil {
+		return false, "", err
+	} else if ownerTokens == nil {
+		return false, "", fmt.Errorf(
+			"no tokens for lobby owner %s (%s), can't check ban status for %s (%s)",
+			owner.Name,
+			owner.Id,
+			user.Name,
+			user.Id,
+		)
+	}
+
+	banEntry, err := g.Twitch.CheckUserBanned(ownerTokens, user.Id, lobby.Owner.ID)
 	if err != nil {
 		return false, "", err
 	} else if banEntry != nil {

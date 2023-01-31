@@ -16,6 +16,7 @@ type AuthHandler struct {
 	authService  *auth.Service
 	twitchClient *twitch.Client
 	generateUrl  config.UrlGeneratorFunc
+	tokens       twitch.TokenStore
 }
 
 type AuthenticatedBasePageData struct {
@@ -94,9 +95,13 @@ func (h *AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	user := auth.User{
-		Id:     twitchUser.Id,
-		Name:   twitchUser.DisplayName,
-		Tokens: *userTokens,
+		Id:   twitchUser.Id,
+		Name: twitchUser.DisplayName,
+	}
+
+	err := h.tokens.Set(&user, userTokens)
+	if err != nil {
+		log.Printf("[ERR][tokens] Failed setting tokens for user %s", user)
 	}
 
 	upsertError := h.db.UpsertUser(&user)

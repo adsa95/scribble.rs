@@ -9,6 +9,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/game"
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -52,12 +53,13 @@ type BasePageConfig struct {
 }
 
 // SetupRoutes registers the official webclient endpoints with the router.
-func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *auth.Service, t *twitch.Client, db *database.DB, g *game.Service) {
+func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *auth.Service, t *twitch.Client, db *database.DB, g *game.Service, tokens twitch.TokenStore) {
 	authHandler := &AuthHandler{
 		db:           db,
 		authService:  a,
 		twitchClient: t,
 		generateUrl:  generateUrl,
+		tokens:       tokens,
 	}
 
 	createHandler := &CreateHandler{
@@ -82,6 +84,7 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 		auth:        a,
 		twitch:      t,
 		generateUrl: generateUrl,
+		tokens:      tokens,
 	}
 
 	r.HandlerFunc("GET", "/", a.CheckUser(joinHandler.ssrJoinForm))
@@ -92,7 +95,7 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 	r.HandlerFunc("GET", "/login_twitch_callback", authHandler.ssrTwitchCallback)
 
 	r.HandlerFunc("GET", "/lobbies", requireScopeMiddleware.Handler([]string{"user:read:subscriptions", "moderation:read"}, createHandler.ssrCreateForm))
-	r.HandlerFunc("POST", "/lobbies", requireUserOrRedirect(a, createHandler.ssrCreateLobby))
+	r.HandlerFunc("POST", "/lobbies", requireScopeMiddleware.Handler([]string{"user:read:subscriptions", "moderation:read"}, createHandler.ssrCreateLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireScopeMiddleware.Handler([]string{"user:read:subscriptions"}, lobbyHandler.ssrEnterLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", lobbyHandler.ssrObserveLobby)
 
@@ -135,6 +138,7 @@ func requireUserOrRedirect(a *auth.Service, h func(http.ResponseWriter, *http.Re
 type RequireScopeMiddleware struct {
 	auth        *auth.Service
 	twitch      *twitch.Client
+	tokens      twitch.TokenStore
 	generateUrl config.UrlGeneratorFunc
 }
 
@@ -146,9 +150,19 @@ func (m *RequireScopeMiddleware) Handler(scopes []string, nextHandler func(w htt
 			return
 		}
 
+		tokens, err := m.tokens.Get(user)
+		if err != nil {
+			log.Printf("[frontend/http][ERR] Failed getting tokens for user %s: %v", user, err)
+			userFacingError(w, "an error occurred")
+			return
+		} else if tokens == nil {
+			m.redirectAuth(w, r, scopes)
+			return
+		}
+
 		for _, requiredScope := range scopes {
-			if !user.Tokens.HasScope(requiredScope) {
-				combinedScopes := append(user.Tokens.Scopes, scopes...)
+			if !tokens.HasScope(requiredScope) {
+				combinedScopes := append(tokens.Scopes, scopes...)
 				m.redirectAuth(w, r, combinedScopes)
 				return
 			}

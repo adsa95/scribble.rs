@@ -3,15 +3,17 @@ package auth
 import (
 	"fmt"
 	"github.com/golang-jwt/jwt"
-	"github.com/scribble-rs/scribble.rs/twitch"
 	"net/http"
 	"time"
 )
 
 type User struct {
-	Id     string
-	Name   string
-	Tokens twitch.TokenSet
+	Id   string
+	Name string
+}
+
+func (u *User) String() string {
+	return fmt.Sprintf("%s (%s)", u.Name, u.Id)
 }
 
 type UserClaims struct {

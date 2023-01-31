@@ -85,6 +85,8 @@ func main() {
 
 	config := config2.FromEnv()
 
+	tokens := twitch.NewMemoryTokenStore()
+
 	authService := &auth.Service{
 		JwtKey:        []byte(config.JwtKey),
 		JwtCookieName: config.JwtCookieName,
@@ -98,6 +100,7 @@ func main() {
 
 	gameService := &game.Service{
 		Twitch: twitchClient,
+		Tokens: tokens,
 	}
 
 	db, _ := database.FromDatabaseUrl(config.DatabaseUrl)
@@ -105,7 +108,7 @@ func main() {
 	router := httprouter.New()
 
 	api.SetupRoutes(router, authService, db)
-	frontend.SetupRoutes(config.GenerateUrl, router, authService, twitchClient, db, gameService)
+	frontend.SetupRoutes(config.GenerateUrl, router, authService, twitchClient, db, gameService, tokens)
 	state.LaunchCleanupRoutine()
 
 	signalChan := make(chan os.Signal, 1)
