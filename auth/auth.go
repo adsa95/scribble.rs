@@ -12,7 +12,7 @@ type User struct {
 	Name string
 }
 
-func (u *User) String() string {
+func (u User) String() string {
 	return fmt.Sprintf("%s (%s)", u.Name, u.Id)
 }
 

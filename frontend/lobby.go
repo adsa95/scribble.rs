@@ -116,11 +116,13 @@ func (h *LobbyHandler) ssrEnterLobby(w http.ResponseWriter, r *http.Request, u a
 		if player == nil {
 			canJoin, reason, err := h.gameService.CanJoin(&u, lobby)
 			if err != nil {
+				log.Printf("[ERR] Failed checking if %s can join %s: %v", u, lobby, err)
 				userFacingError(w, "An error occurred")
 				return
 			}
 
 			if !canJoin {
+				log.Printf("[WARN] %s denied to join %s: %s", u, lobby, reason)
 				userFacingError(w, "You're not allowed to join: "+reason)
 				return
 			}

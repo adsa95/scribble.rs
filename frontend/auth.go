@@ -106,7 +106,7 @@ func (h *AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) 
 
 	upsertError := h.db.UpsertUser(&user)
 	if upsertError != nil {
-		log.Printf("[ERR][DB] Failed upserting user: %v", upsertError)
+		log.Printf("[ERR][DB] Failed upserting user %s: %v", user, upsertError)
 	}
 
 	cookieError := h.authService.SetUserCookie(w, &user)
@@ -115,7 +115,7 @@ func (h *AuthHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	log.Printf("[INFO][AUTH] Successfully logged in user %v (%v)", user.Name, user.Id)
+	log.Printf("[INFO][AUTH] %s logged in successfully", user)
 
 	redirectPath := "/"
 	if r.URL.Query().Has("state") {

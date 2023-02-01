@@ -160,7 +160,7 @@ func (h *CreateHandler) ssrCreateLobby(w http.ResponseWriter, r *http.Request, u
 		log.Println(addLobbyErr.Error())
 	}
 
-	log.Printf("%v (%v) created lobby %v", u.Name, u.Id, lobby.LobbyID)
+	log.Printf("[INFO] %s created lobby %v", u, lobby)
 
 	http.Redirect(w, r, currentBasePageConfig.RootPath+"/lobbies/"+lobby.LobbyID+"/play", http.StatusFound)
 }

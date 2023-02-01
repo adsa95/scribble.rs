@@ -264,7 +264,17 @@ func (c Client) CheckUserSubscription(tokens *TokenSet, userId string, broadcast
 	var result CheckUserSubscriptionResult
 	err := c.doAndParseJson(request, &result)
 	if err != nil {
+		// No sub results in 404 error, not an empty ok response
+		httpError, ok := err.(*HttpError)
+		if ok && httpError.StatusCode == 404 {
+			return nil, nil
+		}
+
 		return nil, err
+	}
+
+	if len(result.Data) == 0 {
+		return nil, nil
 	}
 
 	return &result.Data[0], nil
@@ -285,7 +295,7 @@ func (c *Client) CheckUserFollows(tokens *TokenSet, userId string, broadcasterId
 	var result UserFollowsResult
 	err := c.doAndParseJson(request, &result)
 	if err != nil {
-		// No follow results in 404 error, not empty ok response
+		// No follow results in 404 error, not an empty ok response
 		httpError, ok := err.(*HttpError)
 		if ok && httpError.StatusCode == 404 {
 			return nil, nil

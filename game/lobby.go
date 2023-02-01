@@ -1042,7 +1042,7 @@ func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
 	//It is important to properly disconnect the player before aqcuiring the mutex
 	//in order to avoid false assumptions about the players connection state
 	//and avoid attempting to send events.
-	log.Printf("Player %s (%s) disconnected.\n", player.Name, player.ID)
+	log.Printf("[INFO] %s disconnected from %s", player, lobby)
 	player.Connected = false
 	player.ws = nil
 

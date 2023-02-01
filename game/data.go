@@ -103,6 +103,10 @@ type Lobby struct {
 	WriteJSON func(player *SocketConnection, object interface{}) error
 }
 
+func (lobby Lobby) String() string {
+	return lobby.LobbyID
+}
+
 // EditableLobbySettings represents all lobby settings that are editable by
 // the lobby owner after the lobby has already been opened.
 type EditableLobbySettings struct {
@@ -221,6 +225,10 @@ type Player struct {
 	Rank      int         `json:"rank"`
 	State     PlayerState `json:"state"`
 	Mod       bool        `json:"mod"`
+}
+
+func (player Player) String() string {
+	return player.user.String()
 }
 
 // GetWebsocket simply returns the players websocket connection. This method

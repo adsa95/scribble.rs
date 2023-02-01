@@ -41,7 +41,7 @@ func wsLobbyEndpoint(w http.ResponseWriter, r *http.Request, user auth.User) {
 			return
 		}
 
-		log.Printf("%s (%s) has connected to lobby %s", player.Name, player.ID, lobby.LobbyID)
+		log.Printf("[INFO] %s connected to lobby %s", player, lobby)
 
 		player.SetWebsocket(ws)
 		lobby.OnPlayerConnectUnsynchronized(player)
