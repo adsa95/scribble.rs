@@ -9,13 +9,13 @@ import (
 	"github.com/scribble-rs/scribble.rs/twitch"
 	"log"
 	"net/http"
-	"net/url"
 )
 
 type SettingsHandler struct {
 	db          *database.DB
 	twitch      *twitch.Client
 	generateUrl config.UrlGeneratorFunc
+	tokens      twitch.TokenStore
 }
 
 type settingsPageData struct {
@@ -33,8 +33,6 @@ func (h *SettingsHandler) ssrSettings(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 
-	syncUrl := h.twitch.GetAuthURI(h.generateUrl("/settings_twitch_callback"), "", &[]string{"moderation:read"})
-
 	translation, locale := determineTranslation(r)
 
 	pageData := settingsPageData{
@@ -42,7 +40,7 @@ func (h *SettingsHandler) ssrSettings(w http.ResponseWriter, r *http.Request, u 
 		Translation:               translation,
 		Locale:                    locale,
 		Mods:                      mods,
-		SyncTwitchUrl:             syncUrl,
+		SyncTwitchUrl:             h.generateUrl("/settings/sync"),
 	}
 
 	templateErr := pageTemplates.ExecuteTemplate(w, "settings-page", pageData)
@@ -51,33 +49,20 @@ func (h *SettingsHandler) ssrSettings(w http.ResponseWriter, r *http.Request, u 
 	}
 }
 
-func (h *SettingsHandler) ssrTwitchCallback(w http.ResponseWriter, r *http.Request, u auth.User) {
-	tokens, tokenErr := h.twitch.GetTokenSetFromCode(r.URL.Query().Get("code"))
-	if tokenErr != nil {
+func (h *SettingsHandler) syncTwitchModSettings(w http.ResponseWriter, r *http.Request, u auth.User) {
+	tokens, err := h.tokens.Get(&u)
+	if err != nil {
 		generalUserFacingError(w)
 		return
 	}
 
-	users, usersErr := h.twitch.GetUsers(tokens, url.Values{})
-	if usersErr != nil {
-		generalUserFacingError(w)
-		return
-	}
-
-	if len(users.Data) != 1 {
-		generalUserFacingError(w)
-		return
-	}
-
-	user := users.Data[0]
-
-	mods, getModsErr := h.twitch.GetAllModerators(tokens, user.Id)
+	mods, getModsErr := h.twitch.GetAllModerators(tokens, u.Id)
 	if getModsErr != nil {
 		generalUserFacingError(w)
 		return
 	}
 
-	setModErr := h.db.SetModsForChannel(user.Id, mods)
+	setModErr := h.db.SetModsForChannel(u.Id, mods)
 	if setModErr != nil {
 		generalUserFacingError(w)
 		return

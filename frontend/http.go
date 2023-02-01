@@ -70,6 +70,7 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 		db:          db,
 		twitch:      t,
 		generateUrl: generateUrl,
+		tokens:      tokens,
 	}
 
 	joinHandler := &JoinHandler{
@@ -99,8 +100,8 @@ func SetupRoutes(generateUrl config.UrlGeneratorFunc, r *httprouter.Router, a *a
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/play", requireScopeMiddleware.Handler([]string{"user:read:subscriptions"}, lobbyHandler.ssrEnterLobby))
 	r.HandlerFunc("GET", "/lobbies/:lobbyId/observe", lobbyHandler.ssrObserveLobby)
 
-	r.HandlerFunc("GET", "/settings", requireUserOrRedirect(a, settingsHandler.ssrSettings))
-	r.HandlerFunc("GET", "/settings_twitch_callback", requireUserOrRedirect(a, settingsHandler.ssrTwitchCallback))
+	r.HandlerFunc("GET", "/settings", requireScopeMiddleware.Handler([]string{}, settingsHandler.ssrSettings))
+	r.HandlerFunc("GET", "/settings/sync", requireScopeMiddleware.Handler([]string{"moderation:read"}, settingsHandler.syncTwitchModSettings))
 
 	r.Handler("GET", "/resources/*path", http.StripPrefix(api.RootPath, http.FileServer(http.FS(frontendResourcesFS))))
 }
@@ -142,7 +143,7 @@ type RequireScopeMiddleware struct {
 	generateUrl config.UrlGeneratorFunc
 }
 
-func (m *RequireScopeMiddleware) Handler(scopes []string, nextHandler func(w http.ResponseWriter, r *http.Request, user auth.User)) http.HandlerFunc {
+func (m *RequireScopeMiddleware) Handler(scopes []string, nextHandler func(http.ResponseWriter, *http.Request, auth.User)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, err := m.auth.GetUser(r)
 		if err != nil {

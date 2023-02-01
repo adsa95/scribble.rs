@@ -141,7 +141,7 @@ func (c Client) GetBannedUsers(tokens *TokenSet, broadcasterId string, cursor st
 	params.Add("broadcaster_id", broadcasterId)
 
 	if cursor != "" {
-		params.Add("cursor", cursor)
+		params.Add("after", cursor)
 	}
 
 	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/moderation/banned?"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
@@ -227,10 +227,10 @@ func (c Client) GetAllModerators(tokens *TokenSet, broadcasterId string) ([]Mode
 func (c Client) GetModerators(tokens *TokenSet, broadcasterId string, cursor string) (*GetModeratorsResult, error) {
 	params := url.Values{}
 	params.Add("broadcaster_id", broadcasterId)
-	params.Add("first", "1")
+	params.Add("first", "20")
 
 	if cursor != "" {
-		params.Add("cursor", cursor)
+		params.Add("after", cursor)
 	}
 
 	request, newRequestError := http.NewRequest("GET", "https://api.twitch.tv/helix/moderation/moderators?"+params.Encode(), bytes.NewBuffer(make([]byte, 0)))
