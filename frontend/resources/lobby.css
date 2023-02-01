@@ -131,6 +131,7 @@
     justify-content: center;
     align-items: center;
     overflow: hidden;
+    box-shadow: 1px 1px 10px #555;
 }
 
 .center-dialog-content {
@@ -215,6 +216,7 @@
 }
 
 .dialog-button {
+    cursor: pointer;
     border: none;
     background-color: white;
     padding: 0.5rem 1rem 0.5rem 1rem;
@@ -444,6 +446,7 @@ input[type="button"]:active,
     border: none;
     padding-top: 1rem;
     padding-bottom: 1rem;
+    cursor: pointer;
 }
 
 .kick-player-button + .kick-player-button {
