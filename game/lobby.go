@@ -208,7 +208,7 @@ func (lobby *Lobby) HandleEvent(raw []byte, received *GameEvent, player *Player)
 	} else if received.Type == "kick" {
 		toKickID, isString := (received.Data).(string)
 		if !isString {
-			return fmt.Errorf("invalid data in kick-vote event: %v", received.Data)
+			return fmt.Errorf("invalid data in kick event: %v", received.Data)
 		}
 
 		handleKickEvent(lobby, player, toKickID)
@@ -412,6 +412,8 @@ func handleKickEvent(lobby *Lobby, player *Player, toKickID string) {
 	}
 
 	kickPlayer(lobby, playerToKick, playerToKickIndex)
+
+	log.Printf("[INFO] %s kicked by %s from %s", player, playerToKick, lobby)
 }
 
 // kickPlayer kicks the given player from the lobby, updating the lobby
