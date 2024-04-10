@@ -930,7 +930,6 @@ type PlayerReady struct {
 }
 
 type ObserverReady struct {
-	VotekickEnabled    bool          `json:"votekickEnabled"`
 	GameState          gameState     `json:"gameState"`
 	OwnerID            string        `json:"ownerId"`
 	Round              int           `json:"round"`
